@@ -1,0 +1,49 @@
+# Python environments, package output, and local tooling.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.wheel-smoke/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Case evidence and generated reports must remain outside source control.
+/evidence/
+/cases/
+/reports/
+/output/
+/work/
+*.E01
+*.e01
+*.aff4
+*.vhd
+*.vhdx
+*.dd
+*.img
+*.raw
+$I*
+$R*
+
+# Only explicitly synthetic test fixtures may be checked in.
+!tests/fixtures/
+!tests/fixtures/**
+
+# Credentials and environment-local state.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
