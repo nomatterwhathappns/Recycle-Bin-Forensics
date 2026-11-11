@@ -13,6 +13,8 @@ dist/
 .coverage.*
 htmlcov/
 coverage.xml
+/windows-live.xml
+/test-results/
 .tox/
 .nox/
 .idea/

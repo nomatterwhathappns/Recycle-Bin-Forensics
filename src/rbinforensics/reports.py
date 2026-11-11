@@ -7,6 +7,8 @@ import io
 import json
 import unicodedata
 
+from .analysis import selected_records
+
 
 def safe_text(value: object) -> str:
     text = str(value)
@@ -45,6 +47,7 @@ CSV_FIELDS = (
     "payload_sha256",
     "payload_hash_status",
     "issues",
+    "record_type",
 )
 
 
@@ -52,7 +55,7 @@ def render_csv(report: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
     writer.writeheader()
-    for record in report["records"]:
+    for record in selected_records(report):
         metadata = record["metadata"] or {}
         payload = record["payload"] or {}
         row = {
@@ -65,6 +68,7 @@ def render_csv(report: dict) -> str:
         )
         row["payload_hash_status"] = payload.get("hash_status")
         row["issues"] = ";".join(issue["code"] for issue in record["issues"])
+        row["record_type"] = record["record_type"]
         writer.writerow({key: _csv_text(value) for key, value in row.items()})
     return output.getvalue()
 
@@ -74,8 +78,9 @@ def render_table(report: dict) -> str:
         f"Recycle Bin Forensics {report['tool']['version']}",
         f"Input: {safe_text(report['input'])}",
     ]
-    for record in report["records"]:
+    for record in selected_records(report):
         lines.extend(("", f"[{record['status'].upper()}] {safe_text(record['source_path'])}"))
+        lines.append(f"  Record type   : {record['record_type']}")
         if record["metadata"]:
             metadata = record["metadata"]
             lines.extend(
@@ -92,14 +97,30 @@ def render_table(report: dict) -> str:
                 lines.append(f"  Payload SHA256: {record['payload']['sha256']}")
         if record["source_sha256"]:
             lines.append(f"  Source SHA256 : {record['source_sha256']}")
+        if record["metadata"] is None and record["payload"]:
+            lines.append(f"  Payload       : {record['payload']['status']}")
+            if record["payload"]["sha256"]:
+                lines.append(f"  Payload SHA256: {record['payload']['sha256']}")
         for issue in record["issues"]:
             lines.append(
                 f"  {issue['severity'].upper()} [{safe_text(issue['code'])}]: {safe_text(issue['message'])}"
             )
     summary = report["summary"]
     lines.extend(("", "Summary: " + ", ".join(f"{k}={v}" for k, v in summary.items())))
-    if not summary["candidates"]:
-        lines.append("No $I metadata candidates found. Use --recursive for nested SID directories.")
+    selection = report.get("selection")
+    if selection:
+        lines.append(
+            f"Selection: {selection['matched']} shown, {selection['excluded']} excluded; summary covers full scan."
+        )
+    timeline = report.get("timeline")
+    if timeline:
+        lines.append(
+            f"Timeline: {len(timeline['events'])} dated records, {timeline['undated_records']} undated."
+        )
+    if not summary["candidates"] and not summary.get("orphan_payloads"):
+        lines.append(
+            "No $I metadata candidates or orphan $R items found. Use --recursive for nested SID directories."
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -110,4 +131,8 @@ def render(report: dict, format_name: str) -> str:
         return render_csv(report)
     if format_name == "table":
         return render_table(report)
+    if format_name == "html":
+        from .html_report import render_html
+
+        return render_html(report)
     raise ValueError(f"Unknown report format: {format_name}")

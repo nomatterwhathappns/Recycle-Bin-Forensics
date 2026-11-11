@@ -1,10 +1,10 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan proyek yang ada di repository ini: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif.
+Panduan ini menjelaskan Recycle Bin Forensics **1.0.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.0.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
-Kita membuat **parser artefak forensik dan alat triase lewat terminal**. Input-nya file metadata `$I` atau folder hasil akuisisi yang mengandung file-file tersebut. Output-nya informasi yang bisa diperiksa manusia dan diproses alat lain.
+Kita membuat **parser artefak forensik dan toolkit triase offline**. Input-nya file metadata `$I` atau folder hasil akuisisi. Selain membaca metadata, versi 1.0 menginventaris payload tanpa metadata, memilih temuan dengan filter, membangun timeline, dan membuat laporan HTML mandiri. Output-nya bisa diperiksa manusia dan diproses alat lain.
 
 Pada Recycle Bin Windows modern, satu item dapat mempunyai dua pasangan:
 
@@ -32,6 +32,7 @@ Pemisahan ini sangat penting: **mengetahui jejak file bukan berarti kontennya be
 | `pathlib`, `os`, dan pemeriksaan metadata file | Pemindaian artefak | Memisahkan path bukti lokal dari teks path Windows di dalam artefak |
 | `argparse` | Antarmuka terminal | Parsing argumen, bantuan penggunaan, dan error pemakaian |
 | `json` dan `csv` | Ekspor laporan | Mudah dipakai otomatisasi, spreadsheet, dan alat analisis lain |
+| `html` dan JavaScript lokal | Laporan HTML offline | Menampilkan inventaris dan timeline tanpa server; data bukti di-escape sebelum ditampilkan |
 | `pytest` | Pengujian | Memastikan byte yang diketahui menghasilkan nilai atau error yang diharapkan |
 | Ruff | Pemeriksaan dan format kode | Menemukan kesalahan umum dan menjaga konsistensi |
 | Setuptools / `pyproject.toml` | Packaging | Membuat paket yang dapat dipasang dan command `rbf` |
@@ -56,7 +57,7 @@ argumen pengguna
 validasi input dan tujuan laporan
       |
       v
-temukan kandidat $I secara deterministik
+temukan kandidat $I dan $R secara deterministik
       |
       v
 baca byte + hitung SHA-256 metadata
@@ -71,14 +72,22 @@ periksa pasangan $R + hash jika diminta dan aman
 kumpulkan hasil, warning, error, dan konteks pemindaian
       |
       v
-render table / JSON / CSV + exit code
+pilih view dengan filter tanpa menghapus inventaris penuh
+      |
+      v
+bangun timeline dari timestamp penghapusan yang valid
+      |
+      v
+render table / JSON / CSV / HTML + exit code
 ```
 
-Empat modul utama memisahkan tanggung jawab:
+Modul-modul utama memisahkan tanggung jawab:
 
 - [`parser.py`](../src/rbinforensics/parser.py): mengubah `bytes` menjadi nilai metadata; tidak mengakses filesystem.
 - [`scanner.py`](../src/rbinforensics/scanner.py): menemukan dan membaca artefak, menghitung hash, serta memeriksa payload.
+- [`analysis.py`](../src/rbinforensics/analysis.py): memilih record dengan filter dan membangun timeline dari nilai metadata.
 - [`reports.py`](../src/rbinforensics/reports.py): menyajikan hasil tanpa mengubah cara byte ditafsirkan.
+- [`html_report.py`](../src/rbinforensics/html_report.py): merender view HTML offline dengan perlindungan teks bukti.
 - [`cli.py`](../src/rbinforensics/cli.py): memvalidasi argumen dan menghubungkan komponen menjadi command.
 
 Pemisahan ini memungkinkan kita menguji parser dengan satu buffer byte, tanpa membutuhkan Windows atau file bukti asli. Pemeriksaan filesystem bisa diuji terpisah lewat direktori sementara.
@@ -312,7 +321,7 @@ Exit code memberi sinyal cepat:
 
 - `0`: selesai tanpa error; warning masih perlu ditinjau.
 - `1`: ada error pada record/discovery atau item dilewati; baca rincian sebelum menyimpulkan.
-- `2`: pemakaian/konfigurasi salah, kegagalan input/output tingkat run, atau tidak ada kandidat metadata.
+- `2`: pemakaian/konfigurasi salah, kegagalan input/output tingkat run, atau tidak ada kandidat artefak dalam scope.
 - `130`: operator menginterupsi proses; pemindaian belum lengkap.
 
 Exit `0` tidak berarti semua file yang pernah dihapus berhasil ditemukan. Tool hanya memproses apa yang ada dalam scope input dan format yang didukung.
@@ -380,3 +389,84 @@ Jika ingin mengubah fitur, mulai dari kontraknya: byte atau keadaan input sepert
 - Pengujian apa yang sudah ada dan validasi Windows independen apa yang masih diperlukan.
 
 Pemahaman itu membuat proyek bisa dinilai dari ketelitian rekayasa dan keterbukaan batasnya, sekaligus memberi dasar untuk pengembangan berikutnya.
+
+## 15. Inventaris lengkap: payload tanpa metadata tetap merupakan temuan
+
+Di versi 1.0, pemindaian direktori tidak hanya dimulai dari `$I`. Scanner juga melihat `$R` yang tidak mempunyai pasangan nama metadata pada direktori yang sama. Record-nya bertipe `orphan_payload`.
+
+Contoh:
+
+```text
+$IABC.txt + $RABC.txt  -> metadata dengan pasangan payload
+$IDEF.pdf             -> metadata, payload hilang
+$RGHI.bin             -> orphan payload, metadata tidak ditemukan
+```
+
+Kasus ketiga belum memberi informasi path asli atau waktu penghapusan. Nama `$RGHI.bin` adalah nama akuisisi yang diamati. Tool mempertahankan `metadata = null` dan menjelaskan keadaannya lewat issue, bukan mengisi field dengan dugaan.
+
+Pembedaan lain yang penting: `$I` rusak masih mempunyai keberadaan sebagai counterpart. Jadi `$R` tidak boleh dilabeli orphan hanya karena parser gagal membaca `$I` tersebut. Kehilangan metadata dan kegagalan decode adalah dua keadaan berbeda.
+
+Scanner juga tidak menelusuri isi direktori `$R` saat recursive. Sebuah folder yang dibuang dapat berisi file apa pun, termasuk nama yang kebetulan dimulai `$I`. Menganggapnya sebagai metadata Recycle Bin akan menghasilkan temuan palsu. Container bernama `$Recycle.Bin` sendiri dikecualikan dari kandidat payload.
+
+## 16. Filter: membatasi tampilan sambil mempertahankan audit
+
+Fungsi di `analysis.py` memisahkan dua hal: **apa yang ditemukan** dan **apa yang sedang ingin dilihat analis**.
+
+JSON menyimpan `records` lengkap dan `summary` untuk seluruh run. `selection.record_indexes` adalah daftar posisi record yang masuk view. CSV, terminal, dan HTML memakai view tersebut. JSON masih memungkinkan orang memeriksa record yang tidak terpilih dan alasan masalah scan.
+
+Contoh perintah:
+
+```sh
+rbf scan work/belajar --recursive --extension .pdf --extension .docx --query laporan \
+  --min-size 1024 --deleted-after 2026-01-01 --format html --output work/laporan.html
+```
+
+Artinya: ekstensi PDF **atau** DOCX, lalu harus memenuhi query, ukuran, dan waktu yang diminta. Kategori filter berbeda bergabung dengan AND; ekstensi berulang menjadi alternatif dalam satu kategori.
+
+Pencarian memakai substring literal, bukan regex. Ini membuat arti query mudah dipahami dan menghindari pola regex mahal pada koleksi besar. Filter waktu dan ukuran asli membutuhkan metadata. Payload orphan tidak mendadak memperoleh timestamp hanya supaya bisa lolos filter.
+
+Record error, skipped, dan masalah discovery tetap ditampilkan untuk diperiksa. `selection.matched` menghitung jumlah record yang ditampilkan termasuk diagnosis wajib ini, bukan hanya temuan sukses yang cocok filter. Filter juga tidak mengubah exit code scan yang gagal menjadi sukses. Kalau filter tidak cocok dengan file rusak, keberadaan file rusak itu tetap penting untuk menilai kelengkapan analisis.
+
+### Batas tanggal dan presisi
+
+`--deleted-after` dan `--deleted-before` bersifat inklusif. Tanggal `2026-01-31` berarti **awal hari itu pada UTC**, bukan otomatis seluruh hari. Untuk batas akhir satu hari, tulis eksplisit:
+
+```text
+2026-01-31T23:59:59.9999999Z
+```
+
+Datetime harus membawa `Z` atau offset. `--timezone Asia/Jakarta` hanya mengubah kolom tampilan, bukan makna batas UTC/date yang dimasukkan.
+
+Filter menghitung batas dengan integer tick FILETIME. Dua record yang terpisah 100 ns harus tetap bisa dibedakan. Mengubahnya dulu ke float atau membuang digit pecahan ketujuh bisa memasukkan atau mengeluarkan record yang salah tepat pada batas.
+
+## 17. Timeline: urutan waktu yang dapat dijelaskan
+
+`build_timeline()` mengambil record terpilih yang mempunyai metadata dan deletion time valid. Urutan utamanya adalah `deletion_filetime` mentah. Path sumber menjadi pemecah urutan ketika tick sama sehingga hasil deterministik.
+
+Setiap event membawa path sumber dan path asli, ukuran, SID context, timestamp mentah/UTC/tampilan, serta status payload. Agregat harian dihitung pada tanggal UTC; pengelompokan SID dan ekstensi berasal dari event yang sama.
+
+Karena record diagnosis wajib dipertahankan, metadata valid dengan error saat hashing payload bisa tetap menjadi event walaupun tidak cocok dengan query lain. Jadi timeline merangkum view yang ditampilkan, termasuk diagnosis tersebut. Periksa status record saat menafsirkan hasil filter.
+
+Record tanpa waktu tidak dipaksakan menjadi event. Jumlahnya dicatat sebagai `undated_records`. Timestamp filesystem payload tidak digunakan untuk mengisi kekosongan deletion time karena maknanya berbeda.
+
+Contoh penerapan: analis mencari penghapusan arsip pada rentang insiden, lalu melihat beberapa arsip tercatat dalam menit yang berdekatan. Timeline membantu memusatkan pemeriksaan. Untuk menyimpulkan apa yang terjadi, ia tetap perlu membandingkan jam sumber, log, jurnal filesystem, dan konteks akuisisi. Banyak event pada hari yang sama belum membuktikan siapa yang menghapusnya atau niatnya.
+
+## 18. HTML offline: data bukti harus tetap menjadi teks
+
+`html_report.py` menghasilkan satu dokumen yang bisa dibuka lokal. Style dan script ikut disimpan di dokumen. Tidak ada CDN atau server yang harus dihubungi untuk melihat laporan.
+
+Teks bukti dapat berisi `<script>`, tanda kutip, karakter kontrol, atau nama yang terlihat seperti alamat. Memasukkannya mentah ke HTML dapat mengubah temuan menjadi markup atau script. Renderer harus meng-escape setiap nilai yang berasal dari record, label kasus, filter, atau path sebelum menaruhnya di HTML/atribut.
+
+Kontrol browser menyeleksi dan mengurutkan baris yang sudah dirender. Ia tidak membaca ulang media bukti atau memperbaiki error parsing. Ringkasan penuh dan selection dari CLI tetap harus dibedakan dari pencarian sementara di browser.
+
+Raw FILETIME dan ukuran uint64 juga perlu perhatian saat sorting di JavaScript. Nilai itu dapat melebihi presisi `Number`; perbandingan harus memakai representasi integer yang aman seperti `BigInt` atau pembandingan string desimal yang benar. Path bukti tidak dijadikan tautan yang membuka file asli secara otomatis.
+
+Content Security Policy menambah pembatasan eksekusi dan akses jaringan. Perlindungan ini melengkapi escaping; ia tidak menggantikan kewajiban merender input sebagai data.
+
+## 19. Apa arti validasi Windows yang lebih luas?
+
+Unit test sintetis mengecek byte dan keadaan yang kita tentukan. Uji penghapusan terkontrol pada Windows asli mengecek pertanyaan lain: apakah artefak yang benar-benar dibuat Windows cocok dengan path, ukuran, hash, dan rentang waktu yang dicatat sebelum penghapusan?
+
+Langkah lengkap dan batasnya ada di [VALIDATION_WINDOWS.md](VALIDATION_WINDOWS.md). Tes live harus membuat file disposable miliknya sendiri, mengaktifkan operasi recycle secara sengaja, menemukan pasangan yang dihasilkan, dan tidak menyentuh artefak pengguna lain. Ia tidak boleh mengosongkan seluruh Recycle Bin untuk membuat test mudah.
+
+Satu runner Windows yang lolos hanya membuktikan skenario itu pada build dan konfigurasi tersebut. Corpus independen dari lingkungan yang akan dianalisis tetap diperlukan. Menyebut versi aplikasi `1.0.0` tidak mengubah tingkat pembuktian artefak atau menandakan sertifikasi forensik.
