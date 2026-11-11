@@ -42,6 +42,8 @@ Coverage has separate gates for the headless engine/controller and the native de
 RBF_RUN_GUI=1 python -m pytest tests/test_gui.py tests/test_gui_entry.py --cov=rbinforensics.gui --cov-config=tools/gui.coveragerc --cov-fail-under=85
 ```
 
+Windows packaging uses `python tools/test_windows_gui.py` to give each scenario a fresh Python/Tcl process, matching the application's single-interpreter lifecycle. Every collected scenario must pass; coverage is appended across them and checked at the same 85% threshold. The runner does not retry or skip failing scenarios.
+
 Build portable distributions on native Windows x64; PyInstaller does not cross-compile a Windows executable from Linux:
 
 ```sh
