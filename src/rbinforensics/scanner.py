@@ -26,6 +26,7 @@ MAX_METADATA_BYTES = 128 * 1024
 HASH_CHUNK_BYTES = 1024 * 1024
 SID_PATTERN = re.compile(r"S-\d+(?:-\d+)+", re.IGNORECASE)
 ASCII_CASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+_WINDOWS = os.name == "nt"
 
 
 class EvidenceError(ValueError):
@@ -72,6 +73,14 @@ def _identity(info: os.stat_result) -> tuple[int, ...]:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
+def _cross_api_identity(info: os.stat_result) -> tuple[int, ...]:
+    # Windows Python 3.13 can expose different ctime values via lstat and
+    # fstat for the same unchanged file. Compare ctime only within the same
+    # API below; retain device/inode/size/mtime across the path and handle.
+    signature = _identity(info)
+    return signature[:-1] if _WINDOWS else signature
+
+
 @contextmanager
 def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
     ensure_no_symlinks(path)
@@ -84,15 +93,22 @@ def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
     descriptor = os.open(path, flags)
     with os.fdopen(descriptor, "rb") as stream:
         opened = os.fstat(stream.fileno())
-        if not stat.S_ISREG(opened.st_mode) or _identity(before) != _identity(opened):
+        if not stat.S_ISREG(opened.st_mode) or _cross_api_identity(before) != _cross_api_identity(
+            opened
+        ):
             raise EvidenceError(
                 "changed_during_read",
                 f"Evidence changed while opening it (lstat={_identity(before)}, fstat={_identity(opened)}).",
             )
         yield stream, opened
         after = os.fstat(stream.fileno())
+        path_after = path.lstat()
         # Also detect replacement of the directory entry during a read.
-        if _identity(opened) != _identity(after) or _identity(after) != _identity(path.lstat()):
+        if (
+            _identity(opened) != _identity(after)
+            or _identity(before) != _identity(path_after)
+            or _cross_api_identity(after) != _cross_api_identity(path_after)
+        ):
             raise EvidenceError("changed_during_read", "Evidence changed while reading it.")
 
 

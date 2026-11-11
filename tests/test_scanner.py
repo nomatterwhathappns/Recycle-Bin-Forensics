@@ -85,6 +85,55 @@ def test_payload_hash_is_opt_in_and_streamed(evidence: Path) -> None:
     assert record["status"] == "ok"
 
 
+def test_newly_closed_artifacts_scan_repeatedly_without_false_change_errors(evidence: Path) -> None:
+    """Windows lstat/fstat must agree for stable files immediately after writes.
+
+    Build enough fresh files to catch timestamp-resolution/platform differences
+    without a sleep masking the failure. Expected digests come from the known
+    fixture bytes, not from a second invocation of the scanner being tested.
+    """
+    expected = {}
+    for index in range(128):
+        suffix = f"FRESH{index:04d}.txt"
+        original = rf"C:\Users\Analyst\fresh-{index:04d}.txt"
+        content = f"Harmless synthetic payload {index:04d}.\n".encode("ascii")
+        source = write_item(evidence, suffix, path=original, size=len(content))
+        payload = evidence / ("$R" + suffix)
+        payload.write_bytes(content)
+        expected[source.name] = {
+            "source": source,
+            "payload": payload,
+            "metadata_bytes": blob(path=original, size=len(content)),
+            "payload_bytes": content,
+            "original_path": original,
+        }
+
+    first_records = None
+    for _ in range(3):
+        report = scan(evidence, ScanOptions(hash_payload=True))
+        error_records = [record for record in report["records"] if record["status"] == "error"]
+        assert report["summary"]["errors"] == 0, error_records
+        assert report["summary"]["parsed"] == len(expected), report["records"]
+        assert report["summary"]["payloads_hashed"] == len(expected), report["records"]
+        assert len(report["records"]) == len(expected)
+        for record in report["records"]:
+            item = expected[record["source_name"]]
+            assert record["status"] == "ok", record
+            assert record["source_sha256"] == hashlib.sha256(item["metadata_bytes"]).hexdigest()
+            assert record["payload"]["sha256"] == hashlib.sha256(item["payload_bytes"]).hexdigest()
+            assert record["metadata"]["original_path"] == item["original_path"]
+            assert record["metadata"]["deletion_filetime"] == TICKS
+            assert record["payload"]["size_matches_metadata"] is True
+        if first_records is None:
+            first_records = report["records"]
+        else:
+            assert report["records"] == first_records
+
+    for item in expected.values():
+        assert item["source"].read_bytes() == item["metadata_bytes"]
+        assert item["payload"].read_bytes() == item["payload_bytes"]
+
+
 def test_size_mismatch_is_explicit_warning(evidence: Path) -> None:
     source = write_item(evidence, size=10)
     (evidence / "$RABC.txt").write_bytes(b"short")
@@ -385,6 +434,50 @@ def test_replacement_after_open_is_detected(evidence: Path) -> None:
         with scanner._open_regular(source) as (stream, _):
             assert stream.read(1)
             source.write_bytes(b"replacement")
+
+
+def test_windows_cross_api_ctime_difference_allows_unchanged_evidence(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stable Windows fstat/lstat ctime offset must not create a false alarm."""
+    source = write_item(evidence)
+    expected = source.read_bytes()
+    original_fstat = scanner.os.fstat
+
+    def fstat_with_fixed_ctime_offset(descriptor: int):
+        info = original_fstat(descriptor)
+        attributes = {name: getattr(info, name) for name in dir(info) if name.startswith("st_")}
+        attributes["st_ctime_ns"] += 1_000_000_000
+        return SimpleNamespace(**attributes)
+
+    monkeypatch.setattr(scanner, "_WINDOWS", True)
+    monkeypatch.setattr(scanner.os, "fstat", fstat_with_fixed_ctime_offset)
+    with scanner._open_regular(source) as (stream, _):
+        assert stream.read() == expected
+
+
+def test_windows_ctime_change_between_handle_reads_still_rejected(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ignoring cross-API ctime must not disable same-handle change detection."""
+    source = write_item(evidence)
+    original_fstat = scanner.os.fstat
+    calls = 0
+
+    def fstat_with_changing_ctime(descriptor: int):
+        nonlocal calls
+        info = original_fstat(descriptor)
+        calls += 1
+        attributes = {name: getattr(info, name) for name in dir(info) if name.startswith("st_")}
+        attributes["st_ctime_ns"] += calls * 1_000_000_000
+        return SimpleNamespace(**attributes)
+
+    monkeypatch.setattr(scanner, "_WINDOWS", True)
+    monkeypatch.setattr(scanner.os, "fstat", fstat_with_changing_ctime)
+    with pytest.raises(EvidenceError, match="changed while reading"):
+        with scanner._open_regular(source) as (stream, _):
+            assert stream.read()
+    assert calls == 2
 
 
 def test_display_conversion_error_preserves_utc_and_warns(
