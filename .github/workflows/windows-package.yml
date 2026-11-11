@@ -25,7 +25,7 @@ jobs:
       - name: Exercise the native desktop application
         env:
           RBF_RUN_GUI: "1"
-        run: python -m pytest tests/test_gui.py tests/test_gui_entry.py --cov=rbinforensics.gui --cov-config=tools/gui.coveragerc --cov-report=term-missing --cov-fail-under=85 -v
+        run: python tools/test_windows_gui.py
       - name: Build and smoke-test the bundled desktop application
         run: python tools/build_windows.py
       - name: Upload portable distribution and SHA-256 checksum
