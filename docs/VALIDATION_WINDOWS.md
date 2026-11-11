@@ -66,7 +66,7 @@ Maintain a private known-good corpus for the environments your organisation actu
 - Partial acquisitions, truncated metadata, duplicate/case-variant names on copied filesystems, and unsupported layouts.
 - Independently checked expected values and comparison results from an established second tool where appropriate.
 
-Record exactly which configurations passed and which remain untested. The release number `1.0.0`, passing unit tests, and a single CI live test do not replace this adoption-specific validation.
+Record exactly which configurations passed and which remain untested. A software release number, passing unit tests, a successful desktop-package smoke test, and a single CI live test do not replace this adoption-specific validation.
 
 ## Cleanup and privacy
 

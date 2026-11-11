@@ -193,7 +193,7 @@ def test_failed_report_write_removes_partial_file(
     def fail_sync(_: int) -> None:
         raise OSError("disk failure")
 
-    monkeypatch.setattr(cli.os, "fsync", fail_sync)
+    monkeypatch.setattr("rbinforensics.output.os.fsync", fail_sync)
     assert cli.main(["scan", str(evidence), "--output", str(target)]) == 2
     assert not target.exists()
     assert "disk failure" in capsys.readouterr().err

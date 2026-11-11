@@ -1,10 +1,10 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.0.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.0.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.1.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.1.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
-Kita membuat **parser artefak forensik dan toolkit triase offline**. Input-nya file metadata `$I` atau folder hasil akuisisi. Selain membaca metadata, versi 1.0 menginventaris payload tanpa metadata, memilih temuan dengan filter, membangun timeline, dan membuat laporan HTML mandiri. Output-nya bisa diperiksa manusia dan diproses alat lain.
+Kita membuat **parser artefak forensik dan toolkit triase offline**. Input-nya file metadata `$I` atau folder hasil akuisisi. Selain membaca metadata, tool menginventaris payload tanpa metadata, memilih temuan dengan filter, membangun timeline, dan membuat laporan HTML mandiri. Versi 1.1 menambahkan antarmuka desktop yang memakai mesin analisis sama. Output-nya bisa diperiksa manusia dan diproses alat lain.
 
 Pada Recycle Bin Windows modern, satu item dapat mempunyai dua pasangan:
 
@@ -33,6 +33,9 @@ Pemisahan ini sangat penting: **mengetahui jejak file bukan berarti kontennya be
 | `argparse` | Antarmuka terminal | Parsing argumen, bantuan penggunaan, dan error pemakaian |
 | `json` dan `csv` | Ekspor laporan | Mudah dipakai otomatisasi, spreadsheet, dan alat analisis lain |
 | `html` dan JavaScript lokal | Laporan HTML offline | Menampilkan inventaris dan timeline tanpa server; data bukti di-escape sebelum ditampilkan |
+| `tkinter` / `ttk` | Antarmuka desktop lokal | Dialog file, tabel, detail, dan kontrol tanpa server web |
+| `threading`, queue, dan `contextvars` | Pekerjaan latar, progress, pembatalan | Memisahkan pekerjaan scan dari event loop GUI dan menjaga kontrol tiap run terisolasi |
+| PyInstaller | Paket Windows portable | Membundel Python, Tcl/Tk, dan data zona waktu menjadi folder aplikasi yang dapat dijalankan |
 | `pytest` | Pengujian | Memastikan byte yang diketahui menghasilkan nilai atau error yang diharapkan |
 | Ruff | Pemeriksaan dan format kode | Menemukan kesalahan umum dan menjaga konsistensi |
 | Setuptools / `pyproject.toml` | Packaging | Membuat paket yang dapat dipasang dan command `rbf` |
@@ -89,6 +92,10 @@ Modul-modul utama memisahkan tanggung jawab:
 - [`reports.py`](../src/rbinforensics/reports.py): menyajikan hasil tanpa mengubah cara byte ditafsirkan.
 - [`html_report.py`](../src/rbinforensics/html_report.py): merender view HTML offline dengan perlindungan teks bukti.
 - [`cli.py`](../src/rbinforensics/cli.py): memvalidasi argumen dan menghubungkan komponen menjadi command.
+- [`gui.py`](../src/rbinforensics/gui.py): membangun jendela desktop dan mengubah event worker menjadi tampilan.
+- [`desktop.py`](../src/rbinforensics/desktop.py): mengelola state, thread, hasil lengkap, view, serta pekerjaan ekspor tanpa mengakses widget.
+- [`scan_control.py`](../src/rbinforensics/scan_control.py): sinyal pembatalan dan notifikasi progress untuk satu run.
+- [`output.py`](../src/rbinforensics/output.py): satu implementasi penulisan laporan yang dipakai CLI dan desktop.
 
 Pemisahan ini memungkinkan kita menguji parser dengan satu buffer byte, tanpa membutuhkan Windows atau file bukti asli. Pemeriksaan filesystem bisa diuji terpisah lewat direktori sementara.
 
@@ -437,6 +444,8 @@ Record error, skipped, dan masalah discovery tetap ditampilkan untuk diperiksa. 
 
 Datetime harus membawa `Z` atau offset. `--timezone Asia/Jakarta` hanya mengubah kolom tampilan, bukan makna batas UTC/date yang dimasukkan.
 
+GUI memberi kemudahan tambahan: tanggal **Sampai** tanpa jam diubah menjadi akhir hari UTC (`23:59:59.9999999Z`). Kalender dan label menyebut UTC. Nilai yang sudah diperluas itu dikirim sebagai batas eksplisit ke engine yang sama dan disimpan dalam selection. Jadi UI tidak perlu mengubah aturan parser/filter CLI atau kehilangan presisi; ia menerjemahkan pilihan hari pengguna menjadi parameter yang jelas.
+
 Filter menghitung batas dengan integer tick FILETIME. Dua record yang terpisah 100 ns harus tetap bisa dibedakan. Mengubahnya dulu ke float atau membuang digit pecahan ketujuh bisa memasukkan atau mengeluarkan record yang salah tepat pada batas.
 
 ## 17. Timeline: urutan waktu yang dapat dijelaskan
@@ -469,4 +478,81 @@ Unit test sintetis mengecek byte dan keadaan yang kita tentukan. Uji penghapusan
 
 Langkah lengkap dan batasnya ada di [VALIDATION_WINDOWS.md](VALIDATION_WINDOWS.md). Tes live harus membuat file disposable miliknya sendiri, mengaktifkan operasi recycle secara sengaja, menemukan pasangan yang dihasilkan, dan tidak menyentuh artefak pengguna lain. Ia tidak boleh mengosongkan seluruh Recycle Bin untuk membuat test mudah.
 
-Satu runner Windows yang lolos hanya membuktikan skenario itu pada build dan konfigurasi tersebut. Corpus independen dari lingkungan yang akan dianalisis tetap diperlukan. Menyebut versi aplikasi `1.0.0` tidak mengubah tingkat pembuktian artefak atau menandakan sertifikasi forensik.
+Satu runner Windows yang lolos hanya membuktikan skenario itu pada build dan konfigurasi tersebut. Corpus independen dari lingkungan yang akan dianalisis tetap diperlukan. Nomor versi aplikasi tidak mengubah tingkat pembuktian artefak atau menandakan sertifikasi forensik.
+
+## 20. Desktop: memudahkan alur tanpa membuat parser kedua
+
+GUI adalah lapisan untuk memilih sumber, menjalankan analisis, melihat hasil, dan mengekspor. Ia tetap memakai `scan()`, `apply_filters()`, `build_timeline()`, serta renderer yang sama dengan CLI. Kalau GUI mempunyai parser sendiri, perbaikan pada satu antarmuka bisa tidak masuk ke antarmuka lain dan menghasilkan interpretasi berbeda.
+
+Alur desktop:
+
+```text
+pilihan pengguna di Tk
+        |
+        v
+DesktopSession.start_scan()
+        |
+        v
+worker thread -> scan() -> parser/analysis yang sama
+        |
+        v
+queue: progress / complete / cancelled / error
+        |
+        v
+event loop Tk membaca queue dan memperbarui widget
+```
+
+Tk mempunyai event loop: input keyboard, klik, repaint, dan callback harus tetap mendapat giliran. Membaca beberapa gigabyte payload langsung di callback tombol akan membuat jendela terlihat macet. `DesktopSession.start_scan()` membuat thread pekerja lalu segera mengembalikan kontrol. Filter dan ekspor yang besar juga dapat dikerjakan di worker.
+
+Worker tidak memperbarui widget Tk langsung. Ia mengirim pesan melalui `SimpleQueue`. Thread GUI mengambil pesan tersebut dan mengubah label, progress, tabel, atau tombol. Pola ini memisahkan keselamatan threading dari tampilan dan membuat controller bisa diuji tanpa membuka jendela.
+
+GUI menampilkan maksimal 200 baris per halaman agar memasukkan puluhan ribu widget tidak memblokir event loop. Batas ini hanya pada tabel. `report` lengkap, filter, timeline, dan ekspor tetap memproses inventaris sesuai scope yang dipilih. Tab review memakai seluruh record bermasalah, sedangkan tab inventaris dan timeline memakai selection.
+
+## 21. State mencegah hasil lama dianggap sebagai scan baru
+
+`DesktopSession` menyimpan `state`, `report`, dan `view`. `report` adalah baseline lengkap dari scan yang selesai; `view` adalah hasil seleksi dari baseline tersebut. Filter baru diterapkan ke `report`, bukan ke view sebelumnya, sehingga menekan Reset tidak kehilangan record yang sebelumnya dikeluarkan.
+
+State penting mencakup `idle`, `scanning`, `complete`, `cancelled`, `error`, `filtering`, dan `exporting`. Memulai scan baru mengosongkan hasil lama. Pekerjaan lain ditolak selama state sedang sibuk, dan ekspor membutuhkan state `complete` serta report/view yang tersedia.
+
+Ini melindungi dari alur yang menyesatkan: pengguna menyelesaikan kasus A, memulai kasus B lalu membatalkannya, kemudian menekan ekspor dan tanpa sadar mendapatkan hasil A. Di implementasi ini, pembatalan B tidak menyisakan report A sebagai hasil B.
+
+Controller memakai lock untuk perubahan state dan nomor pekerjaan `_job_id`. Setiap worker hanya boleh menerbitkan hasil untuk pekerjaan yang masih sesuai. Event terminal dimasukkan ke queue setelah state publik diperbarui, sehingga GUI yang menerima `complete` sudah dapat membaca report yang lengkap.
+
+## 22. Progress harus menunjukkan yang benar-benar diketahui
+
+Sebelum discovery selesai, jumlah kandidat belum diketahui. Menampilkan persentase pada tahap itu dapat memberi kepastian palsu. `ScanProgress` memakai `total=None` untuk tahap yang belum mempunyai total, serta field yang berbeda untuk jumlah item dan byte payload:
+
+```python
+@dataclass(frozen=True)
+class ScanProgress:
+    phase: str
+    processed: int
+    total: int | None
+    source_path: str | None = None
+    bytes_processed: int = 0
+    bytes_total: int | None = None
+```
+
+`frozen=True` menjaga isi satu notifikasi tidak berubah setelah dikirim. Pada scan terkontrol, discovery mengumpulkan kandidat lebih dulu agar total pemrosesan mencakup metadata dan orphan yang benar-benar akan diproses. Payload yang sudah terwakili oleh metadata tidak dihitung lagi sebagai orphan.
+
+Persentase byte untuk satu payload berbeda dari persentase seluruh analisis. Dua file yang sudah selesai dari sepuluh file juga tidak berarti 20% byte sudah dibaca karena ukuran payload dapat berbeda. UI harus mempertahankan perbedaan arti itu.
+
+## 23. Pembatalan kooperatif dan hasil yang tidak lengkap
+
+`ScanControl.cancel()` mengatur sebuah `threading.Event`. Scanner memanggil `check()` pada checkpoint. Ketika sinyal aktif, `check()` melempar `ScanCancelled`, yang berada di luar jenis exception error artefak biasa.
+
+Pemisahan exception ini penting. Kalau pembatalan ditangkap sebagai `source_unreadable` untuk satu file lalu scan berlanjut, tombol Batalkan tidak melakukan yang diminta. Hash parsial juga tidak boleh diterbitkan sebagai hash penuh. Run yang dibatalkan tidak mengembalikan completed report dan controller menonaktifkan ekspornya.
+
+Konteks kontrol aktif dibawa dengan `ContextVar`, sehingga helper discovery dan hashing bisa memeriksa sinyal tanpa memakai satu variabel global yang dibagikan semua thread. Dua pekerjaan yang berjalan pada thread berbeda tidak boleh membatalkan satu sama lain. Kode tetap mengembalikan konteks sebelumnya ketika scan selesai atau melempar exception.
+
+Pembatalan tidak menghentikan thread secara paksa. Membunuh thread di tengah I/O atau pembaruan state dapat meninggalkan kondisi yang tidak jelas. Checkpoint bekerja setelah operasi yang sedang berjalan memberi kontrol kembali. Karena itu GUI dapat menampilkan permintaan pembatalan lebih dahulu, lalu konfirmasi `cancelled` ketika worker benar-benar berhenti.
+
+## 24. Satu penulis laporan dan paket Windows yang bisa diuji
+
+`output.py` memusatkan pemeriksaan tujuan dan penulisan laporan. CLI dan GUI sama-sama menolak file yang sudah ada, tujuan di dalam direktori bukti, serta komponen redirect. Penulisan exclusive dengan `x`, flush, dan `fsync` tidak perlu diimplementasikan ulang oleh setiap antarmuka.
+
+Paket Windows memakai PyInstaller mode `onedir`. Hasilnya folder yang berisi executable dan runtime pendukung, lalu diarsipkan menjadi ZIP versi tertentu. Pengguna mengekstrak seluruh folder; hanya menyalin executable akan menghilangkan runtime pendukung.
+
+Script [`tools/build_windows.py`](../tools/build_windows.py) dijalankan pada Windows x64 asli. Ia menyertakan data zona waktu dan metadata versi, menjalankan startup smoke test pada executable hasil build, lalu membuat ZIP dan checksum. `BUILD-INFO.json` di dalam aplikasi mencatat informasi build dan hasil smoke test.
+
+Smoke test paket menjawab apakah executable beserta Tcl/Tk dan engine berhasil dimulai di lingkungan build. Ia tidak menggantikan unit test, pengujian GUI interaktif, atau validasi artefak Windows asli. Untuk memakai aplikasi, ikuti [panduan desktop](DESKTOP.md). Untuk menjelaskan proyek, bedakan ketiga pertanyaan itu dengan jelas.

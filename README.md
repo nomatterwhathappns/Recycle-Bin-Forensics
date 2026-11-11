@@ -1,11 +1,13 @@
-# Recycle Bin Forensics 1.0
+# Recycle Bin Forensics 1.1
 
-An offline Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
+An offline desktop application and Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
 **Designed for artefact triage, incident-response support, and learning binary forensics.** Analysis reads supplied evidence; it does not restore deleted files, acquire disk images, or identify who performed a deletion. Validate findings against known-good Windows samples and independent case evidence.
 
 ## What it does
 
+- Offers a local desktop interface for choosing evidence, scanning, reviewing details, and exporting reports.
+- Keeps the desktop responsive with background work, truthful progress, and cooperative cancellation.
 - Parses `$I` format versions 1 and 2, including strict UTF-16LE paths.
 - Preserves raw 64-bit FILETIME and seven-digit UTC timestamp fractions.
 - Inventories metadata, matching `$R` files/folders, orphan payloads, and discovery problems.
@@ -19,7 +21,33 @@ An offline Python command-line toolkit for examining modern Windows Recycle Bin 
 
 The parser treats decoded Windows paths as evidence text. It never opens those paths on the examiner's computer. Payload correlation uses acquired sibling names. Recursive scans do not enter `$R` payload directories: their contents are data, not another Recycle Bin inventory.
 
-## Install
+## Start with the desktop app
+
+The desktop interface uses Indonesian labels: **Analisis baru**, **Hasil analisis**, and **Panduan**. It runs locally and uses the same analysis engine and report formats as the CLI. See the [desktop user guide](docs/DESKTOP.md) for the complete workflow.
+
+![Desktop results from fictitious demo artifacts](docs/images/desktop-results.png)
+
+The preview uses synthetic data. Native controls and fonts can differ between operating systems.
+
+### Windows portable package
+
+Open the repository's **Actions** page and choose a successful run of the [Windows package workflow](.github/workflows/windows-package.yml). Download its package artifact, extract the portable ZIP, and launch `RecycleBinForensics.exe` from the extracted application folder. Keep the complete folder together; the executable uses its bundled support files. Python does not need to be installed separately for this package.
+
+The artifact includes a versioned Windows x64 ZIP and `SHA256SUMS.txt`. These are workflow artifacts; the project does not require a GitHub Releases publication to build them. The [desktop guide](docs/DESKTOP.md#windows-portable-package) explains extraction and checksum comparison.
+
+### Run from Python
+
+Follow the source installation steps below, then run one of:
+
+```sh
+rbf-gui
+python -m rbinforensics.gui
+rbf gui
+```
+
+The desktop requires Tk support in the Python installation and a graphical display. `python -m tkinter` can check that support. Some Linux distributions package Tk separately; use the Tk package matching your Python installation. The portable Windows package bundles Tcl/Tk and timezone data.
+
+## Source installation and CLI
 
 Requires **Python 3.10 or newer**. UTC analysis has no third-party runtime dependencies.
 
@@ -151,6 +179,7 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 
 ## Documentation and versioning
 
+- [Desktop user guide](docs/DESKTOP.md)
 - [Indonesian learning guide and critical code walkthrough](docs/LEARNING_ID.md)
 - [Binary layouts and parsing decisions](docs/FORMAT.md)
 - [Report contract and interpretation](docs/REPORT_SCHEMA.md) and [JSON Schema 2.0](schemas/report-v2.schema.json)
@@ -159,7 +188,9 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-**Application version `1.0.0` and report schema version `2.0` are separate contracts.** The expanded inventory and selection/timeline shape changes the earlier development JSON contract. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+**Application version `1.1.0` and report schema version `2.0` are separate contracts.** Desktop controls, progress, and cancellation do not change the completed-report schema. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+
+Feature additions increment the minor version (`1.0.0` to `1.1.0`); compatible bug fixes increment the patch version (`1.1.0` to `1.1.1`). A compatibility-breaking application change increments the major version. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development and validation
 

@@ -26,6 +26,31 @@ python -m build
 Use `python -m ruff format .` to apply the formatter. Runtime code must use
 the Python standard library unless a new dependency has a documented need.
 
+## Desktop and Windows packaging
+
+The desktop uses Tk from the selected Python installation. Check it with `python -m tkinter`. On a graphical development machine, enable native widget tests with:
+
+```sh
+RBF_RUN_GUI=1 python -m pytest tests/test_gui.py -v
+```
+
+In PowerShell, set `$env:RBF_RUN_GUI = '1'` before running pytest. The Linux GUI CI job uses a virtual display; ordinary test collection does not require one. Keep worker code independent from Tk widgets: send progress/results through the session queue and update widgets on the GUI thread. Cover cancellation and state transitions, including rejection of export after a cancelled or failed scan.
+
+Coverage has separate gates for the headless engine/controller and the native desktop. Default coverage omits only `gui.py`, because CLI-only hosts need no display. The desktop CI job measures that module independently with a real Tk display:
+
+```sh
+RBF_RUN_GUI=1 python -m pytest tests/test_gui.py tests/test_gui_entry.py --cov=rbinforensics.gui --cov-config=tools/gui.coveragerc --cov-fail-under=85
+```
+
+Build portable distributions on native Windows x64; PyInstaller does not cross-compile a Windows executable from Linux:
+
+```sh
+python -m pip install -e '.[dev,freeze]'
+python tools/build_windows.py
+```
+
+The builder creates new files under `dist/windows` by default and refuses to overwrite an earlier archive/checksum. Use a fresh `--output` directory for another build. It must run the packaged executable's smoke test before a ZIP is considered complete. This test is separate from the controlled Windows artefact validation described in [docs/VALIDATION_WINDOWS.md](docs/VALIDATION_WINDOWS.md).
+
 ## Tests and forensic claims
 
 - Cover changed behavior with a regression test. Include negative cases such

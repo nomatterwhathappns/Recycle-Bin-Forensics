@@ -1,0 +1,7 @@
+[run]
+source = rbinforensics.gui
+branch = True
+
+[report]
+show_missing = True
+precision = 2
