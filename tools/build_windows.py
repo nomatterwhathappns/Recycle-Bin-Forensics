@@ -97,6 +97,36 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def runtime_licenses() -> str:
+    """Preserve redistribution notices supplied by installed build runtimes."""
+    sections = [
+        "Third-party runtime licenses\n\n"
+        "This distribution bundles Python, Tcl/Tk, tzdata, and a PyInstaller bootloader.\n"
+        "The application's own license is provided separately in LICENSE.\n"
+    ]
+    base = Path(sys.base_prefix)
+    sources = [("Python", base / "LICENSE.txt"), ("Python", base / "LICENSE")]
+    if (base / "tcl").is_dir():
+        sources.extend(
+            ("Tcl/Tk: " + str(path.relative_to(base)), path)
+            for path in sorted((base / "tcl").rglob("license.terms"))
+        )
+    for name in ("tzdata", "pyinstaller"):
+        try:
+            distribution = importlib.metadata.distribution(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        for entry in distribution.files or []:
+            if entry.name.lower().startswith(("license", "copying")):
+                sources.append((name + ": " + str(entry), Path(distribution.locate_file(entry))))
+    for label, path in sources:
+        if path.is_file():
+            sections.append(
+                "\n\n=== " + label + " ===\n\n" + path.read_text(encoding="utf-8", errors="replace")
+            )
+    return "".join(sections) + "\n"
+
+
 def build(output: Path) -> tuple[Path, Path]:
     if platform.system() != "Windows" or struct.calcsize("P") != 8:
         raise BuildError("Build on native 64-bit Windows; PyInstaller does not cross-compile.")
@@ -160,6 +190,7 @@ def build(output: Path) -> tuple[Path, Path]:
             json.dumps(information, indent=2) + "\n", encoding="utf-8"
         )
         shutil.copyfile(ROOT / "LICENSE", application / "LICENSE")
+        (application / "THIRD_PARTY_LICENSES.txt").write_text(runtime_licenses(), encoding="utf-8")
         (application / "START_HERE.txt").write_text(
             f"Recycle Bin Forensics {__version__}\n\n"
             "Extract the entire ZIP to a separate application folder.\n"
