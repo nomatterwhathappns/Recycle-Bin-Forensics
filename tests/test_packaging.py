@@ -29,6 +29,13 @@ def test_installed_distribution_and_cli_module_use_same_version() -> None:
     assert __version__ == "1.1.0"
 
 
+def test_runtime_licenses_preserve_installed_timezone_notices():
+    notices = build_windows.runtime_licenses()
+    assert "Python, Tcl/Tk, tzdata" in notices
+    assert "=== tzdata:" in notices
+    assert "Apache License" in notices
+
+
 @pytest.mark.parametrize("version", ["1.1.0", "0.0.0", "65535.1.2"])
 def test_windows_version_resource_preserves_release_number(version: str) -> None:
     resource = build_windows.version_resource(version)
@@ -167,6 +174,7 @@ def test_portable_archive_contains_whole_runtime_and_a_matching_checksum(
         assert f"{build_windows.APP_NAME}/{build_windows.APP_NAME}.exe" in names
         assert f"{build_windows.APP_NAME}/_internal/tzdata/zoneinfo" in names
         assert f"{build_windows.APP_NAME}/LICENSE" in names
+        assert f"{build_windows.APP_NAME}/THIRD_PARTY_LICENSES.txt" in names
         information = json.loads(bundle.read(f"{build_windows.APP_NAME}/BUILD-INFO.json"))
         assert information["version"] == __version__
         assert information["smoke_test"]["checks"]["parser"] is True
