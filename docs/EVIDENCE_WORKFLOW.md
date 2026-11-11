@@ -22,6 +22,8 @@ rbf scan /cases/working/recycle-bin --recursive --format json \
 
 Keep the command, application version, output, exit status, and external acquisition notes. JSON is the preferred report for downstream processing because it preserves structured context and exact field text.
 
+The [desktop application](DESKTOP.md) runs the same engine. Record the selected source, recursive/hash options, display timezone, case labels, version, and export destination when using it. A cancelled run is incomplete and does not expose a completed report for export. Starting another scan clears the earlier in-memory result; retain any needed completed report before beginning another scope.
+
 Use `--output` instead of shell redirection when saving a report. The program validates its `--output` path and refuses an existing file. A shell can truncate a target through `>` before the tool gets control, so the tool cannot protect a redirection destination. The report directory must already exist. For a single-file scan, place the report outside that file's parent evidence directory as well.
 
 If content comparison is necessary, add `--hash-payload`. This increases I/O and can take significant time for large files. Directory payloads are identified but are not recursively hashed. Missing metadata, missing content, and unreadable content are distinct findings.

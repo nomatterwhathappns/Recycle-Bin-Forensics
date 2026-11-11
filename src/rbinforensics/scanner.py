@@ -13,6 +13,7 @@ import re
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,12 +29,46 @@ from .analysis import (
     validate_filters,
 )
 from .parser import ParseError, parse_metadata
+from .scan_control import ScanControl, ScanProgress
 
 MAX_METADATA_BYTES = 128 * 1024
 HASH_CHUNK_BYTES = 1024 * 1024
 SID_PATTERN = re.compile(r"S-\d+(?:-\d+)+", re.IGNORECASE)
 ASCII_CASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 _WINDOWS = os.name == "nt"
+
+
+@dataclass
+class _ProgressState:
+    control: ScanControl
+    processed: int = 0
+    total: int | None = None
+
+
+_ACTIVE_SCAN: ContextVar[_ProgressState | None] = ContextVar("rbf_active_scan", default=None)
+
+
+def _check_cancel() -> None:
+    state = _ACTIVE_SCAN.get()
+    if state is not None:
+        state.control.check()
+
+
+def _progress(
+    phase: str, path: Path | None = None, *, length: int = 0, size: int | None = None
+) -> None:
+    state = _ACTIVE_SCAN.get()
+    if state is not None:
+        state.control.emit(
+            ScanProgress(
+                phase,
+                state.processed,
+                state.total,
+                str(path) if path is not None else None,
+                length,
+                size,
+            )
+        )
 
 
 class EvidenceError(ValueError):
@@ -120,10 +155,13 @@ def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
 
 
 def _read_metadata(path: Path) -> tuple[bytes, str]:
+    _check_cancel()
     with _open_regular(path) as (stream, info):
         if info.st_size > MAX_METADATA_BYTES:
             raise EvidenceError("metadata_too_large", "Metadata exceeds the 128 KiB safety limit.")
+        _check_cancel()
         data = stream.read(MAX_METADATA_BYTES + 1)
+        _check_cancel()
         if len(data) > MAX_METADATA_BYTES:
             raise EvidenceError("metadata_too_large", "Metadata exceeds the 128 KiB safety limit.")
         if len(data) != info.st_size:
@@ -132,12 +170,21 @@ def _read_metadata(path: Path) -> tuple[bytes, str]:
 
 
 def _hash_payload(path: Path) -> tuple[str, int]:
+    _check_cancel()
     digest = hashlib.sha256()
     length = 0
-    with _open_regular(path) as (stream, _):
-        for block in iter(lambda: stream.read(HASH_CHUNK_BYTES), b""):
+    with _open_regular(path) as (stream, info):
+        _progress("hashing", path, length=0, size=info.st_size)
+        while True:
+            _check_cancel()
+            block = stream.read(HASH_CHUNK_BYTES)
+            _check_cancel()
+            if not block:
+                break
             digest.update(block)
             length += len(block)
+            _progress("hashing", path, length=length, size=info.st_size)
+    _check_cancel()
     return digest.hexdigest(), length
 
 
@@ -168,6 +215,27 @@ def _is_payload_name(name: str) -> bool:
     return len(name) > 2 and name.lower().startswith("$r") and name.lower() != "$recycle.bin"
 
 
+def _discovery_metadata_jobs(
+    discovery: list[dict], metadata_names: dict[Path, set[str]]
+) -> list[dict]:
+    """Find observed $I entries whose source could not safely be read.
+
+    Only entries registered inside an inventoried directory qualify. A generic
+    failed/redirected directory must not cause a sibling outside input scope to
+    be opened. These records retain null metadata/source hashes; the safe $R
+    sibling can still be observed using the same filename-only correlation.
+    """
+    jobs = []
+    for record in discovery:
+        _check_cancel()
+        path = Path(record["source_path"])
+        if path.name.lower().startswith("$i") and path.name.translate(
+            ASCII_CASE
+        ) in metadata_names.get(path.parent, set()):
+            jobs.append(record)
+    return jobs
+
+
 def _discover(
     directory: Path,
     recursive: bool,
@@ -178,11 +246,17 @@ def _discover(
     # An explicit stack avoids Python recursion limits on deep directory trees.
     pending = [directory]
     while pending:
+        _check_cancel()
         current = pending.pop()
+        _progress("discovering", current)
         try:
             ensure_no_symlinks(current)
             with os.scandir(current) as entries:
-                ordered = sorted(entries, key=lambda e: e.name)
+                collected = []
+                for entry in entries:
+                    _check_cancel()
+                    collected.append(entry)
+                ordered = sorted(collected, key=lambda e: e.name)
             metadata_names[current] = {
                 entry.name.translate(ASCII_CASE)
                 for entry in ordered
@@ -190,7 +264,9 @@ def _discover(
             }
             children = []
             for entry in ordered:
+                _check_cancel()
                 path = Path(entry.path)
+                _progress("discovering", path)
                 is_payload = _is_payload_name(entry.name)
                 if is_payload:
                     payloads.append(path)
@@ -294,6 +370,7 @@ def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict
             index: dict[str, list[Path]] = {}
             with os.scandir(source.parent) as entries:
                 for entry in entries:
+                    _check_cancel()
                     if _is_payload_name(entry.name):
                         key = entry.name.translate(ASCII_CASE)
                         index.setdefault(key, []).append(Path(entry.path))
@@ -347,7 +424,7 @@ def _display_time(value: str | None, zone: ZoneInfo | timezone) -> str | None:
     return local[:19] + "." + value[20:27] + local[19:]
 
 
-def scan(
+def _scan(
     input_path: Path, options: ScanOptions | None = None, filters: FilterOptions | None = None
 ) -> dict:
     """Return a JSON-serializable report; structural input errors raise.
@@ -357,6 +434,7 @@ def scan(
     """
     options = options or ScanOptions()
     filters = filters or FilterOptions()
+    _check_cancel()
     validate_filters(filters)
     source = absolute_path(input_path)
     ensure_no_symlinks(source)
@@ -369,13 +447,32 @@ def scan(
     discovery: list[dict] = []
     orphan_candidates: list[Path] = []
     metadata_names: dict[Path, set[str]] = {}
+    _progress("discovering", source)
     candidates = (
         _discover(source, options.recursive, discovery, orphan_candidates, metadata_names)
         if source.is_dir()
         else [source]
     )
+    state = _ACTIVE_SCAN.get()
+    discovery_jobs: list[dict] | None = None
+    if state is not None:
+        # Establish a truthful denominator before item processing. Keep the
+        # existing streaming path for clients that do not request progress.
+        candidates = list(candidates)
+        _check_cancel()
+        orphan_candidates = [
+            path
+            for path in orphan_candidates
+            if ("$I" + path.name[2:]).translate(ASCII_CASE)
+            not in metadata_names.get(path.parent, set())
+        ]
+        discovery_jobs = _discovery_metadata_jobs(discovery, metadata_names)
+        state.total = len(candidates) + len(orphan_candidates) + len(discovery_jobs)
+        _progress("processing", source)
     indexes: dict = {}
     for path in candidates:
+        _check_cancel()
+        _progress("processing", path)
         record = _new_record(path)
         try:
             data, digest = _read_metadata(path)
@@ -397,11 +494,15 @@ def scan(
             _issue(record, getattr(exc, "code", "source_unreadable"), str(exc), "error")
             record["payload"] = _payload(record, path, options.hash_payload, indexes)
         records.append(record)
+        if state is not None:
+            state.processed += 1
     groups: dict[tuple[Path, str], list[dict]] = {}
     for record in records:
+        _check_cancel()
         path = Path(record["source_path"])
         groups.setdefault((path.parent, path.name.translate(ASCII_CASE)), []).append(record)
     for group in groups.values():
+        _check_cancel()
         if len(group) > 1:
             for record in group:
                 _issue(
@@ -410,10 +511,26 @@ def scan(
                     "Multiple $I names differ only by ASCII case; review association.",
                 )
     for path in orphan_candidates:
+        _check_cancel()
         counterpart = ("$I" + path.name[2:]).translate(ASCII_CASE)
         if counterpart not in metadata_names.get(path.parent, set()):
+            _progress("processing", path)
             records.append(_orphan_payload(path, options.hash_payload))
+            if state is not None:
+                state.processed += 1
+    if discovery_jobs is None:
+        discovery_jobs = _discovery_metadata_jobs(discovery, metadata_names)
+    for record in discovery_jobs:
+        _check_cancel()
+        path = Path(record["source_path"])
+        _progress("processing", path)
+        # Never read the redirected/unreadable $I itself. Its name is enough
+        # to inspect a safe sibling without inventing original path or time.
+        record["payload"] = _payload(record, path, options.hash_payload, indexes)
+        if state is not None:
+            state.processed += 1
     records.extend(discovery)
+    _check_cancel()
     records.sort(key=lambda item: item["source_path"])
     report = {
         "schema_version": "2.0",
@@ -433,6 +550,32 @@ def scan(
         },
         "records": records,
     }
+    _check_cancel()
     report = apply_filters(report, filters)
+    _check_cancel()
     report["timeline"] = build_timeline(selected_records(report))
+    _check_cancel()
+    _progress("complete", source)
     return report
+
+
+def scan(
+    input_path: Path,
+    options: ScanOptions | None = None,
+    filters: FilterOptions | None = None,
+    *,
+    control: ScanControl | None = None,
+) -> dict:
+    """Analyze evidence, optionally reporting progress and honouring cancel.
+
+    Progress callbacks execute on the caller's scanning thread. Discovery has
+    no total; controlled scans establish an item total before processing. Only
+    the final ``complete`` phase means the entire report is ready. Cancellation
+    raises ``ScanCancelled`` and never returns a partial completed report.
+    """
+    state = _ProgressState(control) if control is not None else None
+    token = _ACTIVE_SCAN.set(state)
+    try:
+        return _scan(input_path, options, filters)
+    finally:
+        _ACTIVE_SCAN.reset(token)

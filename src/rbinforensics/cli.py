@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import __version__
 from .analysis import FilterOptions, validate_filters
+from .output import validate_output as _validate_output
+from .output import write_report
 from .reports import render, safe_text
-from .scanner import EvidenceError, ScanOptions, absolute_path, ensure_no_symlinks, scan
+from .scanner import EvidenceError, ScanOptions, absolute_path, scan
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -21,6 +22,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("gui", help="Open the local desktop application")
     command = commands.add_parser(
         "scan", help="Analyze a $I file or a folder of collected artifacts"
     )
@@ -63,23 +65,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _validate_output(source: Path, output: Path) -> None:
-    ensure_no_symlinks(output)
-    if output.exists():
-        raise EvidenceError("output_exists", "Output already exists; choose a new filename.")
-    # Even single-file analysis must not create a report among its sibling evidence.
-    root = source if source.is_dir() else source.parent
-    if output == root or root in output.parents:
-        raise EvidenceError(
-            "output_inside_evidence", "Report output must be outside the evidence directory."
-        )
-    if not output.parent.is_dir():
-        raise EvidenceError("output_parent_missing", "Output parent directory must already exist.")
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
+    if args.command == "gui":
+        from .gui import main as gui_main
+
+        return gui_main([])
     source = absolute_path(args.input)
     output = absolute_path(args.output) if args.output else None
     try:
@@ -101,25 +93,11 @@ def main(argv: list[str] | None = None) -> int:
             args.recursive, args.hash_payload, args.timezone, args.case_id, args.examiner
         )
         report = scan(source, options, filters)
-        text = render(report, args.format)
         if output:
-            # Revalidate after scanning; never truncate an existing file. Remove
-            # a partial report if a write fails so it cannot look like a full run.
-            _validate_output(source, output)
-            created = False
-            try:
-                with output.open("x", encoding="utf-8", newline="") as stream:
-                    created = True
-                    stream.write(text)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except BaseException:
-                if created:
-                    output.unlink(missing_ok=True)
-                raise
+            write_report(report, output, args.format)
             print(f"Report saved: {safe_text(output)}", file=sys.stderr)
         else:
-            sys.stdout.write(text)
+            sys.stdout.write(render(report, args.format))
         summary = report["summary"]
         if summary["errors"] or summary["skipped"]:
             return 1

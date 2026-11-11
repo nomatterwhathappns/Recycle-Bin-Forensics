@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- A local Tk desktop interface with evidence selection, analysis options, result tables, filters, details, and report export.
+- Background scan/export work so desktop interactions do not block the event loop.
+- Discovery, processing, and hashing progress with cooperative cancellation.
+- A Windows portable-package build with bundled Tcl/Tk/timezone support, startup validation, ZIP output, and SHA-256 checksums.
+- Desktop documentation and GUI/controller/cancellation regression coverage.
+
+### Changed
+
+- Application/package version is `1.1.0`; the completed JSON report contract remains schema `2.0`.
+- Cancelling an analysis leaves it explicitly incomplete and does not expose a completed report for export. Starting a new scan clears the previous in-memory result.
+- CLI and desktop continue to share one parser, scanner, selection, and report-writing implementation.
+
 ## 1.0.0
 
 First numbered 1.0 release of the expanded toolkit.
