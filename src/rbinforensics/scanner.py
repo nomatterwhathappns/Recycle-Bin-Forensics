@@ -20,6 +20,13 @@ from typing import BinaryIO
 from zoneinfo import ZoneInfo
 
 from . import __version__
+from .analysis import (
+    FilterOptions,
+    apply_filters,
+    build_timeline,
+    selected_records,
+    validate_filters,
+)
 from .parser import ParseError, parse_metadata
 
 MAX_METADATA_BYTES = 128 * 1024
@@ -157,7 +164,17 @@ def _new_record(path: Path, record_type: str = "metadata") -> dict:
     }
 
 
-def _discover(directory: Path, recursive: bool, issues: list[dict]) -> Iterator[Path]:
+def _is_payload_name(name: str) -> bool:
+    return len(name) > 2 and name.lower().startswith("$r") and name.lower() != "$recycle.bin"
+
+
+def _discover(
+    directory: Path,
+    recursive: bool,
+    issues: list[dict],
+    payloads: list[Path],
+    metadata_names: dict[Path, set[str]],
+) -> Iterator[Path]:
     # An explicit stack avoids Python recursion limits on deep directory trees.
     pending = [directory]
     while pending:
@@ -166,12 +183,20 @@ def _discover(directory: Path, recursive: bool, issues: list[dict]) -> Iterator[
             ensure_no_symlinks(current)
             with os.scandir(current) as entries:
                 ordered = sorted(entries, key=lambda e: e.name)
+            metadata_names[current] = {
+                entry.name.translate(ASCII_CASE)
+                for entry in ordered
+                if entry.name.lower().startswith("$i")
+            }
             children = []
             for entry in ordered:
                 path = Path(entry.path)
+                is_payload = _is_payload_name(entry.name)
+                if is_payload:
+                    payloads.append(path)
                 try:
                     if _redirects(entry.stat(follow_symlinks=False)):
-                        if recursive or entry.name.lower().startswith("$i"):
+                        if not is_payload and (recursive or entry.name.lower().startswith("$i")):
                             record = _new_record(path, "discovery")
                             _issue(
                                 record,
@@ -181,7 +206,9 @@ def _discover(directory: Path, recursive: bool, issues: list[dict]) -> Iterator[
                             record["status"] = "skipped"
                             issues.append(record)
                     elif entry.is_dir(follow_symlinks=False):
-                        if recursive:
+                        if entry.name.lower().startswith("$i"):
+                            yield path
+                        elif recursive and not is_payload:
                             children.append(path)
                     elif entry.name.lower().startswith("$i"):
                         yield path
@@ -196,8 +223,8 @@ def _discover(directory: Path, recursive: bool, issues: list[dict]) -> Iterator[
             issues.append(record)
 
 
-def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict:
-    result = {
+def _empty_payload(requested: bool) -> dict:
+    return {
         "path": None,
         "status": "not_checked",
         "size": None,
@@ -205,6 +232,52 @@ def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict
         "hash_status": "not_requested" if not requested else "unavailable",
         "size_matches_metadata": None,
     }
+
+
+def _inspect_payload(record: dict, path: Path, requested: bool, result: dict) -> None:
+    result["path"] = str(path)
+    info = path.lstat()
+    if _redirects(info):
+        result["status"] = "symlink_skipped"
+        _issue(
+            record, "payload_symlink_skipped", "Payload symlinks/reparse points are never opened."
+        )
+    elif stat.S_ISDIR(info.st_mode):
+        result["status"] = "available_directory"
+        result["hash_status"] = "not_applicable"
+    elif stat.S_ISREG(info.st_mode):
+        result["status"] = "available_file"
+        result["size"] = info.st_size
+        if record["metadata"] is not None:
+            result["size_matches_metadata"] = info.st_size == record["metadata"]["original_size"]
+            if not result["size_matches_metadata"]:
+                _issue(
+                    record, "payload_size_mismatch", "Observed $R size differs from $I metadata."
+                )
+        if requested:
+            digest, length = _hash_payload(path)
+            result.update(sha256=digest, size=length, hash_status="computed")
+            if length != info.st_size or _identity(info) != _identity(path.lstat()):
+                raise EvidenceError("changed_during_read", "Payload changed before/during hashing.")
+    else:
+        result["status"] = "special_file_skipped"
+        _issue(record, "payload_not_regular", "Special files are never opened.")
+
+
+def _payload_failure(record: dict, result: dict, exc: Exception, requested: bool) -> None:
+    result.update(status="unreadable", sha256=None, size_matches_metadata=None)
+    if requested:
+        result["hash_status"] = "unavailable"
+    _issue(
+        record,
+        getattr(exc, "code", "payload_unreadable"),
+        str(exc),
+        "error" if requested else "warning",
+    )
+
+
+def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict:
+    result = _empty_payload(requested)
     if not source.name.lower().startswith("$i") or len(source.name) <= 2:
         _issue(record, "nonstandard_source_name", "Cannot infer a sibling $R filename.")
         return result
@@ -217,7 +290,7 @@ def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict
             index: dict[str, list[Path]] = {}
             with os.scandir(source.parent) as entries:
                 for entry in entries:
-                    if entry.name.lower().startswith("$r"):
+                    if _is_payload_name(entry.name):
                         key = entry.name.translate(ASCII_CASE)
                         index.setdefault(key, []).append(Path(entry.path))
             indexes[source.parent] = index
@@ -236,47 +309,28 @@ def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict
                 "payload_case_insensitive_match",
                 "Sibling matched using ASCII case-insensitive names.",
             )
-        result["path"] = str(path)
-        info = path.lstat()
-        if _redirects(info):
-            result["status"] = "symlink_skipped"
-            _issue(
-                record,
-                "payload_symlink_skipped",
-                "Payload symlinks/reparse points are never opened.",
-            )
-        elif stat.S_ISDIR(info.st_mode):
-            result["status"] = "available_directory"
-            result["hash_status"] = "not_applicable"
-        elif stat.S_ISREG(info.st_mode):
-            result["status"] = "available_file"
-            result["size"] = info.st_size
-            result["size_matches_metadata"] = info.st_size == record["metadata"]["original_size"]
-            if not result["size_matches_metadata"]:
-                _issue(
-                    record, "payload_size_mismatch", "Observed $R size differs from $I metadata."
-                )
-            if requested:
-                digest, length = _hash_payload(path)
-                result.update(sha256=digest, size=length, hash_status="computed")
-                if length != info.st_size or _identity(info) != _identity(path.lstat()):
-                    raise EvidenceError(
-                        "changed_during_read", "Payload changed before/during hashing."
-                    )
-        else:
-            result["status"] = "special_file_skipped"
-            _issue(record, "payload_not_regular", "Special files are never opened.")
+        _inspect_payload(record, path, requested, result)
     except (OSError, EvidenceError) as exc:
-        result.update(status="unreadable", sha256=None, size_matches_metadata=None)
-        if requested:
-            result["hash_status"] = "unavailable"
-        _issue(
-            record,
-            getattr(exc, "code", "payload_unreadable"),
-            str(exc),
-            "error" if requested else "warning",
-        )
+        _payload_failure(record, result, exc, requested)
     return result
+
+
+def _orphan_payload(path: Path, requested: bool) -> dict:
+    record = _new_record(path, "orphan_payload")
+    _issue(
+        record, "orphan_payload", "No sibling $I entry was found; original path/time are unknown."
+    )
+    result = _empty_payload(requested)
+    try:
+        _inspect_payload(record, path, requested, result)
+        record["source_size"] = result["size"]
+        record["source_sha256"] = result["sha256"]
+        if result["status"] in ("symlink_skipped", "special_file_skipped"):
+            record["status"] = "skipped"
+    except (OSError, EvidenceError) as exc:
+        _payload_failure(record, result, exc, requested)
+    record["payload"] = result
+    return record
 
 
 def _display_time(value: str | None, zone: ZoneInfo | timezone) -> str | None:
@@ -289,13 +343,17 @@ def _display_time(value: str | None, zone: ZoneInfo | timezone) -> str | None:
     return local[:19] + "." + value[20:27] + local[19:]
 
 
-def scan(input_path: Path, options: ScanOptions | None = None) -> dict:
+def scan(
+    input_path: Path, options: ScanOptions | None = None, filters: FilterOptions | None = None
+) -> dict:
     """Return a JSON-serializable report; structural input errors raise.
 
     Every discovered candidate produces its own result. A corrupt record cannot
     abort the rest of a case. Warnings never fabricate missing metadata.
     """
     options = options or ScanOptions()
+    filters = filters or FilterOptions()
+    validate_filters(filters)
     source = absolute_path(input_path)
     ensure_no_symlinks(source)
     info = source.stat()
@@ -305,7 +363,13 @@ def scan(input_path: Path, options: ScanOptions | None = None) -> dict:
     started = datetime.now(timezone.utc).isoformat()
     records: list[dict] = []
     discovery: list[dict] = []
-    candidates = _discover(source, options.recursive, discovery) if source.is_dir() else [source]
+    orphan_candidates: list[Path] = []
+    metadata_names: dict[Path, set[str]] = {}
+    candidates = (
+        _discover(source, options.recursive, discovery, orphan_candidates, metadata_names)
+        if source.is_dir()
+        else [source]
+    )
     indexes: dict = {}
     for path in candidates:
         record = _new_record(path)
@@ -327,11 +391,28 @@ def scan(input_path: Path, options: ScanOptions | None = None) -> dict:
             record["payload"] = _payload(record, path, options.hash_payload, indexes)
         except (OSError, EvidenceError, ParseError) as exc:
             _issue(record, getattr(exc, "code", "source_unreadable"), str(exc), "error")
+            record["payload"] = _payload(record, path, options.hash_payload, indexes)
         records.append(record)
+    groups: dict[tuple[Path, str], list[dict]] = {}
+    for record in records:
+        path = Path(record["source_path"])
+        groups.setdefault((path.parent, path.name.translate(ASCII_CASE)), []).append(record)
+    for group in groups.values():
+        if len(group) > 1:
+            for record in group:
+                _issue(
+                    record,
+                    "metadata_name_collision",
+                    "Multiple $I names differ only by ASCII case; review association.",
+                )
+    for path in orphan_candidates:
+        counterpart = ("$I" + path.name[2:]).translate(ASCII_CASE)
+        if counterpart not in metadata_names.get(path.parent, set()):
+            records.append(_orphan_payload(path, options.hash_payload))
     records.extend(discovery)
     records.sort(key=lambda item: item["source_path"])
-    return {
-        "schema_version": "1.0",
+    report = {
+        "schema_version": "2.0",
         "tool": {"name": "rbinforensics", "version": __version__},
         "started_at_utc": started,
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -344,6 +425,10 @@ def scan(input_path: Path, options: ScanOptions | None = None) -> dict:
             "warnings": sum(any(i["severity"] == "warning" for i in r["issues"]) for r in records),
             "skipped": sum(r["status"] == "skipped" for r in records),
             "payloads_hashed": sum(bool(r["payload"] and r["payload"]["sha256"]) for r in records),
+            "orphan_payloads": sum(r["record_type"] == "orphan_payload" for r in records),
         },
         "records": records,
     }
+    report = apply_filters(report, filters)
+    report["timeline"] = build_timeline(selected_records(report))
+    return report

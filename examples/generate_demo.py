@@ -22,10 +22,10 @@ def demo_filetime() -> int:
     return ((delta.days * 86400 + delta.seconds) * 10_000_000) + delta.microseconds * 10 + 7
 
 
-def metadata(version: int, original_path: str, size: int) -> bytes:
+def metadata(version: int, original_path: str, size: int, *, offset_days: int = 0) -> bytes:
     """Build independent, documented test bytes, not a Windows acquisition."""
     encoded_path = original_path.encode("utf-16-le") + b"\x00\x00"
-    header = struct.pack("<QQQ", version, size, demo_filetime())
+    header = struct.pack("<QQQ", version, size, demo_filetime() + offset_days * 86400 * 10_000_000)
     if version == 1:
         if len(encoded_path) > 520:
             raise ValueError("The version 1 demo path exceeds its fixed 260-code-unit field")
@@ -68,11 +68,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("DEMO03.pdf", 2, r"C:\Users\Demo\Downloads\missing-demo.pdf", None),
     ]
     try:
-        for suffix, version, original_path, payload in samples:
+        for offset_days, (suffix, version, original_path, payload) in enumerate(samples):
             size = len(payload) if payload is not None else 32_768
-            write_new(evidence / f"$I{suffix}", metadata(version, original_path, size))
+            write_new(
+                evidence / f"$I{suffix}",
+                metadata(version, original_path, size, offset_days=offset_days),
+            )
             if payload is not None:
                 write_new(evidence / f"$R{suffix}", payload)
+        write_new(evidence / "$RORPHAN04.bin", b"SYNTHETIC ORPHAN: no metadata exists.\n")
+        orphan_directory = evidence / "$RORPHAN05"
+        orphan_directory.mkdir()
+        write_new(orphan_directory / "notes.txt", b"SYNTHETIC ORPHAN DIRECTORY CONTENT.\n")
         if args.include_broken:
             write_new(evidence / "$IBROKEN.bin", struct.pack("<Q", 2) + b"truncated")
         write_new(

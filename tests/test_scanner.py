@@ -53,7 +53,7 @@ def test_single_metadata_preserves_bytes_path_and_raw_timestamp(evidence: Path) 
     before = source.read_bytes()
     report = scan(source, ScanOptions(case_id="CASE-1", examiner="Analyst"))
     record = report["records"][0]
-    assert report["schema_version"] == "1.0"
+    assert report["schema_version"] == "2.0"
     assert report["options"]["case_id"] == "CASE-1"
     assert report["options"]["examiner"] == "Analyst"
     assert record["metadata"]["original_path"] == r"C:\資料\😀.txt"

@@ -1,0 +1,609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nomatterwhathappns/Recycle-Bin-Forensics/blob/main/schemas/report-v2.schema.json",
+  "title": "Recycle Bin Forensics report, schema version 2.0",
+  "description": "Machine-readable contract for complete artifact inventories, explicit filtered views, and deletion timelines. Application versioning is independent of this report schema.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "rbinforensics"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "input": {
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "recursive": {
+          "type": "boolean"
+        },
+        "hash_payload": {
+          "type": "boolean"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "examiner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "recursive",
+        "hash_payload",
+        "timezone",
+        "case_id",
+        "examiner"
+      ],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payloads_hashed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "orphan_payloads": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "candidates",
+        "parsed",
+        "errors",
+        "warnings",
+        "skipped",
+        "payloads_hashed",
+        "orphan_payloads"
+      ],
+      "additionalProperties": false
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/record"
+      }
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 2,
+                "pattern": "^\\."
+              },
+              "uniqueItems": true
+            },
+            "sid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deleted_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deleted_before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min_size": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "max_size": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          "required": [
+            "query",
+            "extensions",
+            "sid",
+            "deleted_after",
+            "deleted_before",
+            "min_size",
+            "max_size"
+          ],
+          "additionalProperties": false
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "matched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "record_indexes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "filters",
+        "active",
+        "matched",
+        "excluded",
+        "record_indexes"
+      ],
+      "additionalProperties": false
+    },
+    "timeline": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "const": "deletion_time_ascending"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/timeline_event"
+          }
+        },
+        "undated_records": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "daily_counts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date_utc": {
+                "type": "string",
+                "format": "date"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "date_utc",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "by_sid": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "sid",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "by_extension": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "extension": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "extension",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "order",
+        "events",
+        "undated_records",
+        "daily_counts",
+        "by_sid",
+        "by_extension"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "tool",
+    "started_at_utc",
+    "completed_at_utc",
+    "input",
+    "options",
+    "summary",
+    "records",
+    "selection",
+    "timeline"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Diagnostic identifiers are extensible; clients must tolerate unknown codes."
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "format_version": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "original_size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "deletion_filetime": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615,
+          "description": "Unmodified unsigned 64-bit FILETIME tick count, in 100-nanosecond units since 1601-01-01 UTC. Preserve integer precision when processing."
+        },
+        "deleted_at_utc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "UTC timestamp with seven fractional digits, or null when interpretation is unavailable."
+        },
+        "original_path": {
+          "type": "string"
+        },
+        "deleted_at_display": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "format_version",
+        "original_size",
+        "deletion_filetime",
+        "deleted_at_utc",
+        "original_path",
+        "deleted_at_display"
+      ],
+      "additionalProperties": false
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "not_checked",
+            "missing",
+            "ambiguous",
+            "symlink_skipped",
+            "available_directory",
+            "available_file",
+            "special_file_skipped",
+            "unreadable"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "hash_status": {
+          "enum": [
+            "not_requested",
+            "unavailable",
+            "not_applicable",
+            "computed"
+          ]
+        },
+        "size_matches_metadata": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "size",
+        "sha256",
+        "hash_status",
+        "size_matches_metadata"
+      ],
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "properties": {
+        "record_type": {
+          "enum": [
+            "metadata",
+            "discovery",
+            "orphan_payload"
+          ]
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_name": {
+          "type": "string"
+        },
+        "source_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sid": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Containing directory name recognized as SID-like context. This is a filesystem observation, not verified identity or attribution."
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "warning",
+            "error",
+            "skipped"
+          ]
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/metadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/payload"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          }
+        }
+      },
+      "required": [
+        "record_type",
+        "source_path",
+        "source_name",
+        "source_size",
+        "source_sha256",
+        "sid",
+        "status",
+        "metadata",
+        "payload",
+        "issues"
+      ],
+      "additionalProperties": false
+    },
+    "timeline_event": {
+      "type": "object",
+      "properties": {
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "original_path": {
+          "type": "string"
+        },
+        "original_size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "deletion_filetime": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "deleted_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "deleted_at_display": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "payload_status": {
+          "enum": [
+            "not_checked",
+            "missing",
+            "ambiguous",
+            "symlink_skipped",
+            "available_directory",
+            "available_file",
+            "special_file_skipped",
+            "unreadable",
+            null
+          ]
+        }
+      },
+      "required": [
+        "source_path",
+        "sid",
+        "original_path",
+        "original_size",
+        "deletion_filetime",
+        "deleted_at_utc",
+        "deleted_at_display",
+        "payload_status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

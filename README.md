@@ -1,26 +1,27 @@
-# Recycle Bin Forensics
+# Recycle Bin Forensics 1.0
 
-A Python command-line tool for examining modern Windows Recycle Bin `$I` metadata from an acquired file or directory. It decodes original paths, original sizes, and deletion timestamps, correlates sibling `$R` items, and produces reviewable JSON, CSV, or terminal reports.
+An offline Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
-**Designed for offline artefact triage, incident-response support, and learning binary forensics.** It reads evidence and does not restore deleted files or acquire a disk image. Validate it against known-good Windows samples before depending on its output in an investigation.
+**Designed for artefact triage, incident-response support, and learning binary forensics.** Analysis reads supplied evidence; it does not restore deleted files, acquire disk images, or identify who performed a deletion. Validate findings against known-good Windows samples and independent case evidence.
 
 ## What it does
 
-- Parses the version 1 and version 2 `$I` layouts, including UTF-16LE paths.
-- Retains the original 64-bit FILETIME value and seven-digit UTC fractional seconds.
-- Reports malformed, unsupported, inaccessible, or truncated records individually.
-- Computes SHA-256 for metadata bytes and optionally for regular sibling `$R` files.
-- Distinguishes available file payloads, directory payloads, missing payloads, and unsafe links.
-- Scans one file, a directory, or a recursive evidence tree in deterministic order.
-- Exports structured JSON or spreadsheet-friendly CSV, with a readable table for triage.
-- Supports optional local-time display, case identifiers, and examiner labels.
-- Avoids following evidence symlinks and refuses to overwrite existing report files.
+- Parses `$I` format versions 1 and 2, including strict UTF-16LE paths.
+- Preserves raw 64-bit FILETIME and seven-digit UTC timestamp fractions.
+- Inventories metadata, matching `$R` files/folders, orphan payloads, and discovery problems.
+- Reports malformed, unsupported, inaccessible, or truncated items individually.
+- Computes SHA-256 for metadata and optionally for regular `$R` files.
+- Filters by literal search, extension, SID, original size, and deletion-time bounds.
+- Builds an ordered timeline and UTC-day, SID, and extension counts from selected dated metadata.
+- Produces an offline HTML report with browser search/sorting, plus JSON, CSV, and terminal output.
+- Keeps full scan records in JSON even when a filter selects a smaller view.
+- Avoids evidence symlinks/reparse points and refuses to overwrite report files.
 
-The parser never treats a decoded original Windows path as a local file to open. `$R` correlation uses the metadata filename in its acquired directory.
+The parser treats decoded Windows paths as evidence text. It never opens those paths on the examiner's computer. Payload correlation uses acquired sibling names. Recursive scans do not enter `$R` payload directories: their contents are data, not another Recycle Bin inventory.
 
 ## Install
 
-Requires **Python 3.10 or newer**. There are no runtime dependencies for UTC operation.
+Requires **Python 3.10 or newer**. UTC analysis has no third-party runtime dependencies.
 
 ```sh
 git clone https://github.com/nomatterwhathappns/Recycle-Bin-Forensics.git
@@ -46,52 +47,55 @@ rbf --help
 rbf --version
 ```
 
-On Windows or a host without an IANA timezone database, install `tzdata` if you need a named timezone such as `Asia/Jakarta`:
+On hosts without an IANA timezone database, including many Windows installations, install the optional timezone extra for named zones such as `Asia/Jakarta`:
 
 ```sh
 python -m pip install '.[timezone]'
 ```
 
-This optional extra installs the timezone database; `python -m pip install tzdata` also works for an existing installation.
+`python -m rbinforensics` is an alternative to the `rbf` command.
 
-`python -m rbinforensics` is available as an alternative to the `rbf` command.
+## Try it without case evidence
 
-## Try it without real evidence
-
-The generator requires a new destination and writes fictitious metadata and harmless text payloads. It includes both metadata versions, a Unicode path, and a record whose payload is absent.
+The generator requires a new destination and writes fictitious metadata and harmless payloads. It demonstrates both metadata layouts, Unicode, three deletion days, a missing payload, and orphan file/directory payloads.
 
 ```sh
 python examples/generate_demo.py work/demo
 rbf scan work/demo --recursive
-rbf scan work/demo --recursive --format json --output work/demo-report.json
-rbf scan work/demo --recursive --format csv --output work/demo-report.csv
+rbf scan work/demo --recursive --hash-payload --format json --output work/demo.json
+rbf scan work/demo --recursive --format html --output work/demo.html
 ```
 
-Add `--include-broken` with a different destination to see a deliberately damaged record and partial-failure reporting. Generated samples demonstrate behavior; they are not evidence of interoperability with every Windows release.
+Open `work/demo.html` in a browser. The report is self-contained; it needs no server, account, CDN, or network connection. Treat report contents as case data: original paths, hashes, and examiner labels can be sensitive.
+
+Use `--include-broken` with a different generator destination to demonstrate partial failures. Generated bytes test implementation behavior; they are not an independently acquired Windows corpus.
 
 ## Examine acquired evidence
 
-Use a forensic acquisition or verified working copy, ideally on a read-only mount. Place reports outside the evidence input tree.
-
-Prefer `--output` for saved reports so destination checks and exclusive creation apply. Shell redirection such as `>` happens before this program runs and can overwrite files without those checks.
+Use an acquisition or verified working copy, preferably on a read-only mount. Preserve volume/SID folder structure. Put reports outside the evidence directory and use a new filename for every run.
 
 ```sh
-# A single acquired metadata file; single quotes keep the dollar sign literal.
+# A single metadata item; single quotes keep the dollar sign literal.
 rbf scan '/cases/working/$IABC123.docx'
 
-# All users and nested directories in an acquired Recycle Bin tree.
-rbf scan /cases/working/recycle-bin --recursive --format json \
-  --output /cases/reports/recycle-bin.json --case-id IR-2026-001 --examiner analyst
+# A full inventory with hashes and run labels.
+rbf scan /cases/working/recycle-bin --recursive --hash-payload --format json \
+  --output /cases/reports/run-001.json --case-id IR-2026-001 --examiner analyst
 
-# Display a second timestamp in a chosen zone and hash regular $R payloads.
-rbf scan /cases/working/recycle-bin --recursive --timezone Asia/Jakarta \
-  --hash-payload --format csv --output /cases/reports/recycle-bin.csv
+# Selected documents in a reviewable offline HTML report.
+rbf scan /cases/working/recycle-bin --recursive --query finance --extension .pdf \
+  --deleted-after 2026-01-01 --deleted-before 2026-01-31T23:59:59.9999999Z \
+  --timezone Asia/Jakarta --format html --output /cases/reports/finance.html
+
+# Multiple extensions are alternatives; different filter categories combine with AND.
+rbf scan /cases/working/recycle-bin --recursive --extension .pdf --extension .docx \
+  --min-size 1024 --max-size 10485760 --format csv --output /cases/reports/documents.csv
 ```
 
-PowerShell also expands `$` inside double quotes. Use single quotes:
+PowerShell also expands `$` in double quotes. Use single quotes:
 
 ```powershell
-rbf scan 'D:\Case\Working\$Recycle.Bin' --recursive --format json --output 'D:\Case\Reports\recycle-bin.json'
+rbf scan 'D:\Case\Working\$Recycle.Bin' --recursive --format html --output 'D:\Case\Reports\review.html'
 ```
 
 For `cmd.exe`, use ordinary double-quoted paths:
@@ -100,44 +104,64 @@ For `cmd.exe`, use ordinary double-quoted paths:
 rbf scan "D:\Case\Working\$Recycle.Bin" --recursive
 ```
 
-Do not interpret an empty scan as proof that nothing was deleted. The data may be outside the supplied scope or no longer exist.
+Prefer `--output` to shell redirection. A shell can truncate a `>` destination before this program runs, bypassing the tool's exclusive creation and destination checks. The report parent directory must already exist; for single-file input, report output must also be outside that file's parent evidence directory.
+
+## Filters, inventory, and timeline
+
+| Option | Meaning |
+| --- | --- |
+| `--query TEXT` | Case-insensitive literal search across original/acquired paths and source names |
+| `--extension .pdf` | Original-path extension; repeat for alternatives; orphan payloads use their acquired filename |
+| `--sid SID` | Exact case-insensitive match to the SID-like ancestor recorded by the scanner |
+| `--deleted-after VALUE` | Inclusive lower deletion bound |
+| `--deleted-before VALUE` | Inclusive upper deletion bound |
+| `--min-size BYTES`, `--max-size BYTES` | Inclusive original-size bounds; require metadata |
+
+Date bounds accept `YYYY-MM-DD` as **UTC midnight**, or ISO datetimes with `Z`/an explicit offset. A date-only `--deleted-before 2026-01-31` includes midnight at the start of that date, not its entire day. Use an explicit final seven-digit fraction for a full-day upper bound. Time comparisons retain 100 ns tick precision. Display timezone changes presentation, not filter interpretation.
+
+Directory scans include orphan `$R` files/folders without inventing their original paths, sizes, or deletion timestamps. An orphan means no matching metadata name was found in that directory; it does not prove why metadata is missing. A malformed matching `$I` is still a metadata counterpart, so its payload is not labelled orphan merely because parsing failed. Literal `$Recycle.Bin` containers are not payloads.
+
+JSON retains the **complete inventory and full-scan summary**. `selection` records which indexes are shown; `timeline` summarizes shown, dated metadata. CSV, terminal, and HTML present that selection. Error, skipped, and discovery records remain visible despite filters, and scan failures still affect the exit status. `selection.matched` includes these mandatory diagnostics. Parsed metadata on a diagnostic record can appear in the timeline even if it does not match other requested criteria. A selected view with no findings does not establish absence from the source device.
+
+The timeline sorts by encoded deletion FILETIME. Payload filesystem modification times are not substituted for missing deletion times. Counts and clusters assist triage; they do not identify an actor or establish intent.
 
 ### Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Scan completed without record or scan errors. Warnings may still need review. |
-| `1` | One or more record/discovery errors or skipped evidence items; review the report. |
-| `2` | Invalid usage/configuration, a top-level input/output failure, or no metadata candidates found. |
-| `130` | Interrupted by the operator; the scan is incomplete. |
-
-Use JSON for automated processing; table formatting is intended for people. JSON includes a schema version, tool/run context, input/options, summary, and per-file results. Numeric sizes are bytes. Raw FILETIME remains available alongside converted timestamps. CSV escapes control characters and formula-leading text for safer spreadsheet viewing; use JSON when exact text preservation matters. See the [report schema](docs/REPORT_SCHEMA.md) for field meanings and integer-precision considerations.
+| `0` | Scan completed without record/discovery errors or skipped items; warnings still need review |
+| `1` | One or more record/discovery errors or skipped evidence items |
+| `2` | Invalid usage/configuration, top-level input/output failure, or no artefact candidates in scope |
+| `130` | Interrupted by the operator; the scan is incomplete |
 
 ## Understanding the findings
 
 | Finding | What it supports | What it does not establish |
 | --- | --- | --- |
-| Original path | The path recorded in this `$I` file | The present existence of that path or verified file content |
-| Deletion FILETIME | The timestamp encoded in the artefact | A verified clock, a user identity, or intent |
-| Original size | The original size recorded in metadata | Integrity of a remaining `$R` item |
-| Sibling `$R` file | A matching item exists by acquired filename | Authenticity or a complete recovery |
-| SHA-256 | A fingerprint of the bytes the tool read | Acquisition quality, provenance, or chain of custody |
+| Original path | Path text recorded in `$I` | Current existence or verified original content |
+| Deletion FILETIME | Timestamp encoded in the artefact | A trustworthy source clock, user identity, or intent |
+| Original size | Size recorded in metadata | Integrity of a remaining payload |
+| Sibling `$R` | Matching acquired filename exists | Authenticity or complete recovery |
+| Orphan `$R` | A payload-like entry lacks matching metadata in scope | Original name, deletion time, or reason metadata is absent |
+| SHA-256 | Fingerprint of the bytes read | Acquisition quality, provenance, or chain of custody |
 
-Reading a writable filesystem can update access timestamps even when a program never opens evidence for writing. Hashes and case labels support documentation but do not replace acquisition procedures or independent corroboration.
+Reads on writable filesystems can update access times. Hashes and case labels support documentation but do not replace acquisition procedures. Preserve original bytes and corroborate findings with appropriate independent sources.
 
-This release does not parse legacy `INFO2`, carve unallocated disk space, recover permanently deleted files, parse filesystem journals, or identify who performed a deletion. It does not recursively hash directory payloads or inventory `$R` items without a metadata counterpart. A copied Recycle Bin can lose permissions, original filesystem metadata, or context.
+This release does not parse legacy `INFO2`, carve unallocated space, restore content, parse filesystem journals, or recursively hash directory payloads. Symlink/reparse-point components are rejected. Metadata reads are capped at 128 KiB per file. Payload hashing streams files, but inventory, analysis, and rendering are assembled in memory; partition very large cases into documented scopes.
 
-Metadata reads are limited to 128 KiB per candidate. Payload hashing streams regular files in chunks, but the full report is assembled in memory. Partition very large cases into documented input scopes. Paths containing symlink/reparse-point components are rejected; use a direct path to the working copy.
+## Documentation and versioning
 
-## Documentation
-
-- [Indonesian learning guide: architecture, critical code, and real cases](docs/LEARNING_ID.md)
-- [Binary layouts, parsing decisions, and references](docs/FORMAT.md)
-- [JSON/CSV schema and result interpretation](docs/REPORT_SCHEMA.md), with a [machine-readable JSON Schema](schemas/report-v1.schema.json)
-- [Evidence workflow and interpretation](docs/EVIDENCE_WORKFLOW.md)
+- [Indonesian learning guide and critical code walkthrough](docs/LEARNING_ID.md)
+- [Binary layouts and parsing decisions](docs/FORMAT.md)
+- [Report contract and interpretation](docs/REPORT_SCHEMA.md) and [JSON Schema 2.0](schemas/report-v2.schema.json)
+- [Evidence workflow](docs/EVIDENCE_WORKFLOW.md)
+- [Controlled Windows validation](docs/VALIDATION_WINDOWS.md)
+- [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-## Development
+**Application version `1.0.0` and report schema version `2.0` are separate contracts.** The expanded inventory and selection/timeline shape changes the earlier development JSON contract. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+
+## Development and validation
 
 ```sh
 python -m pip install -e '.[dev]'
@@ -147,6 +171,15 @@ python -m ruff format --check .
 python -m build
 ```
 
-Tests use independently constructed synthetic bytes and temporary directories, including malformed metadata and CLI/report behavior. They do not constitute a known-good corpus acquired on real Windows systems. CI exercises supported platforms; see the workflow for the exact Python and OS matrix.
+Optional browser regression tests use Playwright with an installed Chromium or Google Chrome:
+
+```sh
+python -m pip install -e '.[dev,browser]'
+RBF_RUN_BROWSER=1 python -m pytest tests/test_browser_html.py -v
+```
+
+Set `RBF_CHROMIUM` to an explicit browser executable if it is not on `PATH`. Browser-test dependencies are not needed to generate or open reports.
+
+The suite includes synthetic byte fixtures, actual filesystem scenarios, filtering/timeline boundaries, report-schema checks, and HTML safety checks. CI exercises supported operating systems and Python versions. Controlled Windows deletion validation is a separate opt-in procedure described in [VALIDATION_WINDOWS.md](docs/VALIDATION_WINDOWS.md). A live runner test represents its particular Windows build/configuration; it is not certification of every Windows release, filesystem, or acquisition method.
 
 Licensed under the [MIT License](LICENSE).

@@ -26,6 +26,26 @@ Use `--output` instead of shell redirection when saving a report. The program va
 
 If content comparison is necessary, add `--hash-payload`. This increases I/O and can take significant time for large files. Directory payloads are identified but are not recursively hashed. Missing metadata, missing content, and unreadable content are distinct findings.
 
+## Inventory, selection, and review reports
+
+Directory scans include orphan `$R` entries without a matching `$I` name. Keep them in the inventory even though original path and deletion time are unknown. A malformed matching `$I` is a different condition; review its error and the separately observed payload. Do not infer cause or actor from an orphan classification.
+
+Recursive scans treat `$R` directories as payload objects and do not reinterpret their contents as Recycle Bin artefacts. Preserve volume/SID collection boundaries so sibling relationships remain meaningful. A single metadata-file input analyses that item and its sibling correlation; it does not inventory unrelated siblings as orphans.
+
+Use filters to produce a view relevant to a question, and retain the complete JSON inventory:
+
+```sh
+rbf scan /cases/working/recycle-bin --recursive --query archive --extension .zip \
+  --deleted-after 2026-01-01T00:00:00Z --deleted-before 2026-01-31T23:59:59.9999999Z \
+  --format json --output /cases/reports/archive-scope.json
+```
+
+`summary` remains the full scan scope. `selection.record_indexes` identifies shown records, including mandatory error/skipped/discovery diagnostics. CSV, terminal, and HTML use that selected view. A diagnostic with decoded metadata may still appear in the timeline despite not matching other filters. Read status and issues when interpreting counts.
+
+The deletion timeline uses raw FILETIME ordering and UTC calendar-day grouping. Payload filesystem timestamps do not replace missing deletion timestamps. Time filters are inclusive; date-only values mean UTC midnight. The display timezone does not silently reinterpret a date-only filter as local time.
+
+For a local review copy, request `--format html` with a fresh `--output` filename. The result is standalone and works offline. It can contain sensitive paths, hashes, labels, and findings; handle it under the same access rules as other case reports. Browser controls narrow/sort the already generated view and do not perform another source scan.
+
 ## Review every run
 
 Check all of the following before relying on results:
@@ -62,6 +82,8 @@ Windows does not route every deletion through Recycle Bin. Permanent deletion, s
 
 ## Validation before operational adoption
 
-The repository's synthetic tests establish behavior for known byte sequences and error cases. Before adoption, add a separately maintained known-good corpus acquired from the Windows versions and configurations relevant to your organisation. Record the actual source path, file size, controlled deletion time, metadata bytes, `$R` state, expected timezone interpretation, and independent comparison results. Test malformed and partial acquisitions as well as ordinary samples.
+The repository's synthetic tests establish behavior for known byte sequences and error cases. Its opt-in native Windows Shell validation checks controlled files against independently recorded facts on a disposable host; see [VALIDATION_WINDOWS.md](VALIDATION_WINDOWS.md) for the command and scope. Neither layer constitutes a corpus spanning every Windows build or acquisition method.
+
+Before adoption, add a separately maintained known-good corpus acquired from the Windows versions and configurations relevant to your organisation. Record the actual source path, file size, controlled deletion time, metadata bytes, `$R` state, expected timezone interpretation, and independent comparison results. Test malformed and partial acquisitions as well as ordinary samples.
 
 Keep sensitive case data outside the repository. Do not commit real user paths, confidential files, custody records, or access tokens when reporting a bug. Prefer a minimal synthetic reproduction or follow private reporting guidance in `SECURITY.md`.

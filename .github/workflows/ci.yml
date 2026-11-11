@@ -9,6 +9,38 @@ permissions:
   contents: read
 
 jobs:
+  browser:
+    name: Offline HTML browser validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install browser test dependencies
+        run: python -m pip install ".[dev,browser]"
+      - name: Exercise interactive report in Chromium
+        env:
+          RBF_RUN_BROWSER: "1"
+        run: python -m pytest tests/test_browser_html.py -v
+  windows-live:
+    name: Controlled Windows Shell validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install package and test dependencies
+        run: python -m pip install ".[dev]"
+      - name: Validate real Shell-generated Recycle Bin artifacts
+        env:
+          RBF_RUN_WINDOWS_LIVE: "1"
+        run: python -m pytest tests/test_windows_live.py -v --junitxml=windows-live.xml
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

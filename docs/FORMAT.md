@@ -58,13 +58,17 @@ For an acquired file named `$IABC123.ext`, the candidate payload is a sibling `$
 
 Metadata SHA-256 fingerprints the bytes actually read, including bytes that do not successfully parse. Optional payload hashing is limited to safe regular files and is reported separately. File and directory availability do not imply that a payload has the recorded original size or has remained unchanged.
 
+Directory inventory also reports `$R` entries without a counterpart name as `orphan_payload`. This is a filesystem observation, not a recovered `$I` structure: original path/size and deletion timestamp remain unavailable. An existing malformed `$I` counterpart is not the same as a missing counterpart. `$R` directories are inventory objects whose contents are not recursively reclassified as Recycle Bin metadata.
+
+Filters and timeline analysis operate on these parsed/observed values without modifying source bytes. Time bounds compare integer FILETIME ticks, and timeline order uses the same raw value. The report schema version is independent of the encoded `$I` layout version and application release number.
+
 ## Boundaries of this implementation
 
 - Malformed records yield per-file errors; later candidates can still be examined.
 - Unsupported versions are not guessed from their apparent size.
 - Decoded original paths are data, never commands or local destinations.
 - Forensic findings require external validation and case context.
-- Synthetic unit tests exercise implementation logic; independent Windows acquisitions are still needed for interoperability validation.
+- Synthetic tests exercise implementation logic; the opt-in controlled Windows Shell test checks its specific live environment. Independent acquisitions are still needed for the Windows/configuration corpus relevant to operational adoption.
 
 ## References
 
