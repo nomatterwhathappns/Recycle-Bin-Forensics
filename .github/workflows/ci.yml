@@ -40,7 +40,14 @@ jobs:
       - name: Validate real Shell-generated Recycle Bin artifacts
         env:
           RBF_RUN_WINDOWS_LIVE: "1"
-        run: python -m pytest tests/test_windows_live.py -v --junitxml=windows-live.xml
+        run: python -m pytest tests/test_windows_live.py -v -o junit_family=xunit1 --junitxml=windows-live.xml
+      - name: Preserve controlled validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlled-windows-validation
+          path: windows-live.xml
+          retention-days: 14
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

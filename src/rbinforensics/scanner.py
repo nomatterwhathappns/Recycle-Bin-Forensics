@@ -242,6 +242,8 @@ def _inspect_payload(record: dict, path: Path, requested: bool, result: dict) ->
         _issue(
             record, "payload_symlink_skipped", "Payload symlinks/reparse points are never opened."
         )
+        if record["status"] != "error":
+            record["status"] = "skipped"
     elif stat.S_ISDIR(info.st_mode):
         result["status"] = "available_directory"
         result["hash_status"] = "not_applicable"
@@ -262,6 +264,8 @@ def _inspect_payload(record: dict, path: Path, requested: bool, result: dict) ->
     else:
         result["status"] = "special_file_skipped"
         _issue(record, "payload_not_regular", "Special files are never opened.")
+        if record["status"] != "error":
+            record["status"] = "skipped"
 
 
 def _payload_failure(record: dict, result: dict, exc: Exception, requested: bool) -> None:

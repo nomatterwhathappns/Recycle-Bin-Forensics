@@ -322,6 +322,28 @@ def test_payload_symlink_not_hashed(evidence: Path, tmp_path: Path) -> None:
     assert record["payload"]["status"] == "symlink_skipped"
     assert record["payload"]["sha256"] is None
     assert "payload_symlink_skipped" in codes(record)
+    assert record["status"] == "skipped"
+    assert record["metadata"] is not None
+    report = scan(source)
+    assert report["summary"]["skipped"] == 1
+    assert report["summary"]["parsed"] == 1
+
+
+def test_skipped_payload_never_downgrades_metadata_error(evidence: Path, tmp_path: Path) -> None:
+    source = evidence / "$IABC.txt"
+    source.write_bytes(b"bad")
+    target = tmp_path.resolve() / "outside-corrupt-payload"
+    target.write_bytes(b"payload")
+    link_or_skip(evidence / "$RABC.txt", target)
+    report = scan(source, ScanOptions(hash_payload=True))
+    record = report["records"][0]
+    assert record["status"] == "error"
+    assert record["metadata"] is None
+    assert record["payload"]["status"] == "symlink_skipped"
+    assert record["payload"]["sha256"] is None
+    assert "truncated_header" in codes(record)
+    assert "payload_symlink_skipped" in codes(record)
+    assert report["summary"]["errors"] == 1
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFO required")
