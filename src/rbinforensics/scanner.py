@@ -85,7 +85,10 @@ def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
     with os.fdopen(descriptor, "rb") as stream:
         opened = os.fstat(stream.fileno())
         if not stat.S_ISREG(opened.st_mode) or _identity(before) != _identity(opened):
-            raise EvidenceError("changed_during_read", "Evidence changed while opening it.")
+            raise EvidenceError(
+                "changed_during_read",
+                f"Evidence changed while opening it (lstat={_identity(before)}, fstat={_identity(opened)}).",
+            )
         yield stream, opened
         after = os.fstat(stream.fileno())
         # Also detect replacement of the directory entry during a read.
