@@ -125,6 +125,10 @@ def test_linux_host_cannot_claim_to_produce_native_windows_binary(
 def _mock_native_builder(monkeypatch: pytest.MonkeyPatch, before_smoke=None) -> list:
     monkeypatch.setattr(build_windows.platform, "system", lambda: "Windows")
     monkeypatch.setattr(build_windows.platform, "machine", lambda: "AMD64")
+    # Keep mocked build metadata independent of host-specific platform probes
+    # (Python 3.10 on Windows may otherwise call subprocess to run `ver`).
+    monkeypatch.setattr(build_windows.platform, "version", lambda: "10.0.26100")
+    monkeypatch.setattr(build_windows.platform, "python_version", lambda: "3.13.0")
     original_version = importlib.metadata.version
     monkeypatch.setattr(
         build_windows.importlib.metadata,
