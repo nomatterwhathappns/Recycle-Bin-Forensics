@@ -1,0 +1,133 @@
+name: Publish an existing verified build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        type: string
+      commit:
+        description: Full source commit already validated by both runs
+        required: true
+        type: string
+      ci_run:
+        description: Successful complete CI run ID in this repository
+        required: true
+        type: string
+      windows_run:
+        description: Successful native Windows package run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-refs/tags/${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify completed runs and publish their exact source
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_COMMIT: ${{ inputs.commit }}
+      CI_RUN: ${{ inputs.ci_run }}
+      WINDOWS_RUN: ${{ inputs.windows_run }}
+    steps:
+      - name: Bind successful validation runs and tag to the same commit
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess
+          repository = os.environ['GH_REPO']
+          commit = os.environ['SOURCE_COMMIT']
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'[0-9a-f]{40}', commit) or not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
+              raise SystemExit('Invalid commit or release tag')
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', 'repos/' + repository + '/' + path]))
+          for variable, workflow in [('CI_RUN', 'ci.yml'), ('WINDOWS_RUN', 'windows-package.yml')]:
+              run_id = os.environ[variable]
+              if not re.fullmatch(r'[1-9][0-9]*', run_id):
+                  raise SystemExit('Invalid validation run ID')
+              run = api('actions/runs/' + run_id)
+              if (run['status'] != 'completed' or run['conclusion'] != 'success'
+                  or run['head_sha'] != commit or run['head_repository']['full_name'] != repository
+                  or run['path'] != '.github/workflows/' + workflow):
+                  raise SystemExit('Validation run identity or result does not match')
+          target = api('git/ref/tags/' + tag)['object']
+          if target['type'] == 'tag':
+              target = api('git/tags/' + target['sha'])['object']
+          if target['type'] != 'commit' or target['sha'] != commit:
+              raise SystemExit('Version tag does not identify the validated source commit')
+          print('Both completed validation runs and the existing tag identify the same source.')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build Python packages from the validated tag
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          python -m pip install ".[dev]"
+          python -m build
+      - uses: actions/download-artifact@v4
+        with:
+          name: RecycleBinForensics-windows-x64
+          path: work/windows-download
+          run-id: ${{ inputs.windows_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: reference-validation-results
+          path: work/reference-results
+          run-id: ${{ inputs.ci_run }}
+          github-token: ${{ github.token }}
+      - name: Assemble and verify complete release assets
+        run: |
+          python -m tools.prepare_release \
+            --windows-zip "work/windows-download/RecycleBinForensics-${RELEASE_TAG#v}-windows-x64.zip" \
+            --windows-checksum work/windows-download/SHA256SUMS.txt \
+            --dist-dir dist --output work/release-assets --commit "$SOURCE_COMMIT" --tag "$RELEASE_TAG" \
+            --report work/reference-results/synthetic-reference.json \
+            --report work/reference-results/windows-reference.json \
+            --report "docs/results/benchmark-${RELEASE_TAG#v}.json" \
+            --report "docs/results/benchmark-large-payload-${RELEASE_TAG#v}.json"
+          python - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          from tools.prepare_release import verify_checksums
+          root = Path('work/release-assets')
+          notes = root / 'RELEASE-NOTES.md'
+          base = 'https://github.com/' + os.environ['GH_REPO'] + '/actions/runs/'
+          notes.write_text(notes.read_text() + '\nPublication uses completed validation runs for the exact tagged source:\n\n'
+              + '- Complete CI: ' + base + os.environ['CI_RUN'] + '\n'
+              + '- Native Windows build: ' + base + os.environ['WINDOWS_RUN'] + '\n'
+              + '\nAn explicit publication workflow verifies these successful runs, their source commit, and the existing tag before assembling any assets.\n',
+              encoding='utf-8', newline='\n')
+          checksums = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n'
+              for path in sorted(root.iterdir()) if path.name != 'SHA256SUMS.txt')
+          (root / 'SHA256SUMS.txt').write_text(checksums, encoding='utf-8', newline='\n')
+          verify_checksums(root)
+          PY
+      - name: Upload draft, verify its downloads, and publish
+        run: |
+          gh release create "$RELEASE_TAG" work/release-assets/* --draft --verify-tag \
+            --title "Recycle Bin Forensics $RELEASE_TAG" --notes-file work/release-assets/RELEASE-NOTES.md
+          gh release download "$RELEASE_TAG" --dir work/release-downloaded
+          python - <<'PY'
+          from pathlib import Path
+          from tools.prepare_release import verify_checksums
+          verify_checksums(Path('work/release-downloaded'))
+          PY
+          gh release edit "$RELEASE_TAG" --draft=false --latest
