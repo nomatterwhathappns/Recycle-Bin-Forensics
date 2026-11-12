@@ -74,3 +74,27 @@ A Tk timer requests callbacks every 10 ms. Each phase records observed callback 
 No OS cache flush is performed. Generation and repeated reads generally warm filesystem caches, so these results cannot be presented as cold-disk performance. Logical payload throughput includes discovery, metadata parsing, safety checks, timeline construction, and hashing; it is not storage-device bandwidth.
 
 Use at least three repeats for comparative statements. Compare the same application version, payload size, counts, Python/Tk versions, cache method, and storage conditions. A managed cloud host or virtual display is useful for reproducibility but does not predict every Parrot laptop or Windows workstation. Published JSON reports and a short explanation of their tested scope belong alongside release notes.
+
+## Recorded 1.3.0 measurements
+
+These actual measurements used CPython 3.12.14 on Linux x86_64, an AMD EPYC 9V74 host exposing three logical CPUs, and Tk 9.0.4 under a virtual display. Each count used three repeats, generated 64-byte payloads, and generally warm/uncontrolled filesystem caches. [Raw report](results/benchmark-1.3.0.json).
+
+| Metadata records | Median scan, hash off (s) | Median scan, hash on (s) | Highest scan-process RSS (MiB) |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 0.125 | 0.169 | 22.0 |
+| 10,000 | 1.376 | 1.846 | 73.8 |
+| 100,000 | 15.885 | 19.421 | 594.8 |
+
+| Metadata records | Median GUI scan + first page (s) | Median sort handler (ms) | Longest observed scan/load heartbeat gap (ms) |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 0.235 | 3.8 | 43.6 |
+| 10,000 | 1.655 | 15.0 | 200.4 |
+| 100,000 | 18.682 | 81.2 | 598.1 |
+
+At 100,000 records the engine reached about 595 MiB process RSS and the GUI scan/load phase had an observed callback gap of about 0.60 seconds. Pagination bounds displayed rows, while the complete inventory remains in memory. These results establish a practical large-scope cost; do not describe the interface as continuously responsive at that scale. Partition large investigations into documented scopes where appropriate.
+
+A separate [large-payload report](results/benchmark-large-payload-1.3.0.json) used 100 files of 1 MiB each, three repeats, and no GUI. Median scan time was 0.015 s without hashing and 0.111 s with hashing (about 898 MiB/s logical payload throughput during the complete scan). The generated, cache-warm 100 MiB workload does not measure cold-device bandwidth.
+
+The main report measured clean commit `b0e07d4`; the large-payload report measured clean commit `78df265`. Subsequent changes add validation hardening and documentation/results; the engine and benchmark implementation used for these measurements are unchanged. Both reports record their full source commit and dirty-tree state. Full commit identifiers and workload facts remain available in the raw reports.
+
+These timings exclude JSON/CSV/HTML serialization and export writes. They do not cover damaged-input distributions, slow/network media, concurrent workloads, every Python/Tk version, or large payloads beyond the explicitly recorded workload.
