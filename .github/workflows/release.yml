@@ -1,0 +1,89 @@
+name: Publish verified release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+  windows:
+    uses: ./.github/workflows/windows-package.yml
+  publish:
+    name: Assemble and publish checked release assets
+    needs: [validate, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check tag and install build dependencies
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -m pip install ".[dev]"
+          python - <<'PY'
+          import os
+          from rbinforensics import __version__
+          if os.environ["RELEASE_TAG"] != "v" + __version__:
+              raise SystemExit("Tag must match the package version exactly.")
+          PY
+      - name: Build Python distributions
+        run: python -m build
+      - name: Download tested Windows distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: RecycleBinForensics-windows-x64
+          path: work/windows-download
+      - name: Download completed reference comparisons
+        uses: actions/download-artifact@v4
+        with:
+          name: reference-validation-results
+          path: work/reference-results
+      - name: Assemble verified package and synthetic corpus assets
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -m tools.prepare_release \
+            --windows-zip "work/windows-download/RecycleBinForensics-${RELEASE_TAG#v}-windows-x64.zip" \
+            --windows-checksum work/windows-download/SHA256SUMS.txt \
+            --dist-dir dist --output work/release-assets \
+            --commit "$SOURCE_COMMIT" --tag "$RELEASE_TAG" \
+            --report work/reference-results/synthetic-reference.json \
+            --report work/reference-results/windows-reference.json \
+            --report "docs/results/benchmark-${RELEASE_TAG#v}.json"
+      - name: Create draft and upload complete assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" work/release-assets/* \
+            --draft --verify-tag --title "Recycle Bin Forensics $RELEASE_TAG" \
+            --notes-file work/release-assets/RELEASE-NOTES.md
+      - name: Verify downloaded assets before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release download "$RELEASE_TAG" --dir work/release-downloaded
+          python - <<'PY'
+          from pathlib import Path
+          from tools.prepare_release import verify_checksums
+          verify_checksums(Path("work/release-downloaded"))
+          PY
+          gh release edit "$RELEASE_TAG" --draft=false --latest

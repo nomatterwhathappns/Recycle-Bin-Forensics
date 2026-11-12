@@ -57,6 +57,8 @@ The builder creates new files under `dist/windows` by default and refuses to ove
 
 ## Tests and forensic claims
 
+Use the [synthetic corpus](docs/DATASET.md) to reproduce expected findings, the [reference comparison](docs/VALIDATION_REFERENCE.md) to check independent interpretation, and the [benchmark tool](docs/BENCHMARKS.md) to measure performance. Reference-parser agreement has a documented field/precision scope; known differences must remain explicit in results. Benchmarks are observations of their recorded host and workload, not universal performance promises.
+
 - Cover changed behavior with a regression test. Include negative cases such
   as truncated input, invalid lengths, and encoding errors for parser changes.
 - Construct synthetic samples in tests where practical. Keep the expected
