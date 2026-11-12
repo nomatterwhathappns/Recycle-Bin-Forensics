@@ -95,6 +95,6 @@ At 100,000 records the engine reached about 595 MiB process RSS and the GUI scan
 
 A separate [large-payload report](results/benchmark-large-payload-1.3.0.json) used 100 files of 1 MiB each, three repeats, and no GUI. Median scan time was 0.015 s without hashing and 0.111 s with hashing (about 898 MiB/s logical payload throughput during the complete scan). The generated, cache-warm 100 MiB workload does not measure cold-device bandwidth.
 
-The main report measured clean commit `b0e07d4`; the large-payload report measured clean commit `78df265`. Subsequent changes add validation hardening and documentation/results; the engine and benchmark implementation used for these measurements are unchanged. Both reports record their full source commit and dirty-tree state. Full commit identifiers and workload facts remain available in the raw reports.
+The main report measured clean commit `b0e07d4`; the large-payload report measured clean commit `78df265`. Subsequent changes add validation hardening, documentation/results, and canonicalize internally owned benchmark temporary paths for macOS portability. The measured Linux scan/GUI operation logic and engine are unchanged. Both reports record their full source commit and dirty-tree state. Full commit identifiers and workload facts remain available in the raw reports.
 
 These timings exclude JSON/CSV/HTML serialization and export writes. They do not cover damaged-input distributions, slow/network media, concurrent workloads, every Python/Tk version, or large payloads beyond the explicitly recorded workload.

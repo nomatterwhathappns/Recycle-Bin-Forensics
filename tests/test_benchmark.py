@@ -238,3 +238,58 @@ def test_output_and_workload_redirects_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Symlink/reparse"):
         benchmark.validate_destination(redirect / "report.json")
     assert list(original.iterdir()) == []
+
+
+def test_default_owned_temporary_workspace_can_use_an_os_alias(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path.resolve()
+    actual = root / "actual-temp-root"
+    actual.mkdir()
+    sentinel = actual / "unrelated-file"
+    sentinel.write_text("preserve")
+    alias = root / "os-temp-alias"
+    try:
+        alias.symlink_to(actual, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation unavailable")
+    monkeypatch.setattr(benchmark.tempfile, "tempdir", str(alias))
+    output = root / "benchmark.json"
+    assert (
+        benchmark.main(
+            [
+                "--counts",
+                "1",
+                "--repeats",
+                "1",
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(output.read_text())
+    assert report["status"] == "completed"
+    assert len(report["measurements"]) == 2
+    assert all(result["validated"] for result in report["measurements"])
+    assert list(actual.iterdir()) == [sentinel]
+    assert sentinel.read_text() == "preserve"
+    assert alias.is_symlink()
+
+    # A caller-supplied redirect remains unsupported despite the internal
+    # canonicalization of a directory created by TemporaryDirectory itself.
+    refused_output = root / "refused.json"
+    with pytest.raises(SystemExit) as error:
+        benchmark.main(
+            [
+                "--counts",
+                "1",
+                "--repeats",
+                "1",
+                "--work-dir",
+                str(alias),
+                "--output",
+                str(refused_output),
+            ]
+        )
+    assert error.value.code == 1
+    assert not refused_output.exists()
+    assert list(actual.iterdir()) == [sentinel]

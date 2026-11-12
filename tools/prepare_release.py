@@ -189,7 +189,10 @@ def demo_archive(destination: Path) -> None:
     from examples.corpus import generate_corpus, verify_corpus
 
     with tempfile.TemporaryDirectory(prefix="rbf-release-demo-") as temporary:
-        corpus = Path(temporary) / "synthetic-corpus"
+        # macOS may expose its system temp root through /var -> /private/var.
+        # Canonicalize only this newly allocated, internally owned directory;
+        # caller-supplied paths retain the strict redirect checks.
+        corpus = Path(temporary).resolve() / "synthetic-corpus"
         generate_corpus(corpus)
         if verify_corpus(corpus).get("status") != "passed":
             raise ReleaseError("Synthetic corpus verification failed before packaging.")
@@ -269,7 +272,7 @@ def prepare_release(
     ):
         raise ReleaseError("Release inputs have duplicate or reserved asset names.")
     with tempfile.TemporaryDirectory(prefix="rbf-release-stage-", dir=output.parent) as temporary:
-        staging = Path(temporary)
+        staging = Path(temporary).resolve()
         for path in inputs:
             shutil.copyfile(path, staging / path.name)
         # Recheck copied bytes: changes during copying must not acquire new

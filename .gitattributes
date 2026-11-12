@@ -1,0 +1,2 @@
+# Fixture hashes and deliberately malformed bytes must survive every checkout.
+tests/fixtures/synthetic-v1/** -text
