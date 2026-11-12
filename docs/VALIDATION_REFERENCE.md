@@ -105,22 +105,39 @@ either parser's malformed-input policy should be adopted by the other.
 
 ## Compare acquired Windows samples
 
-Supply individual copied `$I` files repeatedly:
+For the controlled Windows samples preserved by CI, use the provenance-bound mode:
 
 ```sh
 python tools/compare_reference.py \
-  --input 'work/acquired/$IEXAMPLE1.txt' \
-  --input 'work/acquired/$IEXAMPLE2.txt' \
+  --windows-samples work/windows-reference-samples \
+  --expected-samples 2 \
   --reference work/reference/extracted/usr/bin/rifiuti-vista \
   --output work/windows-reference.json
 ```
 
-The controlled Windows CI test creates uniquely owned ASCII/Unicode samples,
-records their known path/size/time interval and digest, and safely copies only
-their own metadata for this independent comparison. Its ground-truth validation
-and the Linux comparison are separate checks. Inspect the matching commit's
+Each case directory must contain exactly its named `$I` and `provenance.json`.
+The latter must identify a `controlled_windows_shell` sample and record the
+original path/size, Windows build, payload and metadata digests, and independent
+pre/post-recycle FILETIME bounds. The comparator validates the metadata digest,
+checks the decoded path/size against those known facts, and checks raw FILETIME
+against that clock interval. It does not derive an exact timestamp oracle from
+the parser being tested. Input and provenance hashes plus the recorded facts are
+bound into the report. Missing cases, extra/unbound files, invalid types, and
+out-of-window timestamps fail validation. The expected sample count defaults to
+2 and must be a positive integer when explicitly supplied.
+
+The controlled Windows CI test creates uniquely owned ASCII/Unicode samples and
+safely copies only their verified metadata. Its original Shell/ground-truth test
+and this provenance-bound Linux comparison are separate checks. Inspect the matching commit's
 `reference-validation-results` artifact for `synthetic-reference.json` and
 `windows-reference.json`; a workflow definition alone does not establish a pass.
+
+For ad hoc parser agreement without independent sample provenance, repeated
+`--input 'work/acquired/$IEXAMPLE.txt'` arguments remain available. The report
+explicitly marks that ground truth is not checked. Its
+`summary.ground_truth_checked_records` is `0`; the checked corpus has `12`, and
+the controlled two-case Windows comparison has `2`. Agreement between two
+parsers alone must not be described as an independent known-value check.
 
 The XML adapter is deliberate: rifiuti2 0.8.2's JSON output contains trailing
 commas. The adapter requires one correctly identified record and parses sizes as
