@@ -1,10 +1,10 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.1.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.1.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.2.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.2.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
-Kita membuat **parser artefak forensik dan toolkit triase offline**. Input-nya file metadata `$I` atau folder hasil akuisisi. Selain membaca metadata, tool menginventaris payload tanpa metadata, memilih temuan dengan filter, membangun timeline, dan membuat laporan HTML mandiri. Versi 1.1 menambahkan antarmuka desktop yang memakai mesin analisis sama. Output-nya bisa diperiksa manusia dan diproses alat lain.
+Kita membuat **parser artefak forensik dan toolkit triase offline**. Input-nya file metadata `$I` atau folder hasil akuisisi. Selain membaca metadata, tool menginventaris payload tanpa metadata, memilih temuan dengan filter, membangun timeline, dan membuat laporan HTML mandiri. Versi 1.1 menambahkan antarmuka desktop yang memakai mesin analisis sama; versi 1.2 memperluas ruang baca, detail, pengaturan teks, dan sorting tampilannya. Output-nya bisa diperiksa manusia dan diproses alat lain.
 
 Pada Recycle Bin Windows modern, satu item dapat mempunyai dua pasangan:
 
@@ -556,3 +556,56 @@ Paket Windows memakai PyInstaller mode `onedir`. Hasilnya folder yang berisi exe
 Script [`tools/build_windows.py`](../tools/build_windows.py) dijalankan pada Windows x64 asli. Ia menyertakan data zona waktu dan metadata versi, menjalankan startup smoke test pada executable hasil build, lalu membuat ZIP dan checksum. `BUILD-INFO.json` di dalam aplikasi mencatat informasi build dan hasil smoke test.
 
 Smoke test paket menjawab apakah executable beserta Tcl/Tk dan engine berhasil dimulai di lingkungan build. Ia tidak menggantikan unit test, pengujian GUI interaktif, atau validasi artefak Windows asli. Untuk memakai aplikasi, ikuti [panduan desktop](DESKTOP.md). Untuk menjelaskan proyek, bedakan ketiga pertanyaan itu dengan jelas.
+
+## 25. Ruang baca: tabel luas dan detail yang terstruktur
+
+Versi 1.2 memisahkan pekerjaan memilih record dari pekerjaan membaca semua field-nya. Tabel berada di atas dan detail di bawah, memakai lebar ruang hasil. Pembatas horizontal dapat ditarik untuk memberi ruang lebih besar ke bagian yang sedang dibutuhkan. Ringkasan scan dibuat ringkas, sedangkan filter lanjutan bisa dilipat. Nilai filter tetap tersimpan dalam sesi dan selection tetap berlaku ketika kontrolnya disembunyikan.
+
+Perubahan ini menyelesaikan masalah praktis: path Windows dan SHA-256 sering panjang, sedangkan panel sempit hanya memperlihatkan sedikit field sebelum pengguna harus menggulir. Menambah jumlah field dalam panel yang sama tidak menambah informasi yang benar-benar bisa dibaca. Layout perlu memberi prioritas kepada tabel dan detail tanpa menyembunyikan error atau arti scope scan.
+
+[`detail_view.py`](../src/rbinforensics/detail_view.py) memusatkan penyajian satu record melalui `DetailView`. Metode `set_record()` menerima record terpilih, lalu mengisi kelompok **Ringkasan**, **Metadata**, **Payload**, dan **Hash & sumber**. Teks bukti dipresentasikan lewat escaping karakter kontrol agar nama atau path tidak menyamar sebagai struktur antarmuka. Nilai mentah di report tidak diubah oleh pemformatan tampilan.
+
+Ada dua status yang harus dibedakan:
+
+```text
+Metadata : Berhasil dibaca
+Payload  : Tidak ditemukan
+```
+
+Keduanya dapat berlaku sekaligus. `record.status == "ok"` menunjukkan tidak ada masalah pada pemrosesan record itu, tetapi keadaan payload mempunyai field tersendiri. Menampilkan satu kata `ok` tanpa konteks bisa membuat pengguna mengira konten tersedia. Panel baru menjelaskan keadaan metadata dan payload secara terpisah, serta mempertahankan issue yang perlu ditinjau.
+
+Ukuran juga perlu label yang tepat: `original_size` berasal dari `$I`; ukuran sumber metadata adalah jumlah byte file `$I`; ukuran payload adalah pengamatan atas `$R` reguler. Pada orphan, sumber record-nya adalah payload yang diamati sehingga ukuran/hash sumber tidak boleh disebut hash metadata. Penyajian yang rapi tetap harus mempertahankan perbedaan makna tersebut.
+
+## 26. Jendela detail dan hubungan dengan pilihan baris
+
+**Perbesar detail** membuka jendela Tk `Toplevel` yang dapat diubah ukurannya atau dimaksimalkan. Ia memakai `DetailView` yang sama dengan panel bawah. Karena formatter dan labelnya sama, perbaikan pada satu tempat langsung berlaku pada kedua tampilan.
+
+Jendela tambahan tetap menjadi bagian dari event loop Tk yang sama; ia tidak membuat worker parser kedua atau memulai scan baru. Ketika pengguna memilih record lain, kedua tampilan mengikuti pilihan itu. Ketika halaman, hasil filter, atau scan baru membuat pilihan sebelumnya tidak lagi berlaku, detail harus dikosongkan. Menyimpan teks record lama di jendela yang masih terbuka dapat membuat pengguna mengaitkan hash atau timestamp yang salah dengan baris saat ini.
+
+Pengosongan itu juga berlaku pada aksi salin. Tombol tidak boleh tetap menyalin hash record yang sudah tidak terlihat. Sebaliknya, perubahan ukuran teks tidak mengubah pilihan record: ia hanya mengubah cara nilai yang sama digambar. Perbedaan ini merupakan kontrak interaksi yang perlu diuji, bukan sekadar pilihan tampilan.
+
+## 27. Sorting harus membandingkan nilai bukti, lalu membagi halaman
+
+[`presentation.py`](../src/rbinforensics/presentation.py) menyediakan `sort_records()` agar pengurutan tabel tidak menyatu dengan widget Tk. Fungsi menerima daftar record dan menghasilkan urutan tampilan baru tanpa memodifikasi report baseline.
+
+Urutannya harus seperti ini:
+
+```text
+baseline lengkap -> selection -> sort seluruh view -> ambil halaman -> render baris
+```
+
+Kalau hanya 200 baris pada halaman pertama yang diurutkan, file terbesar pada halaman kedua tidak pernah bisa pindah ke atas. Hasilnya terlihat terurut tetapi tidak benar untuk seluruh view.
+
+Kolom ukuran dibandingkan sebagai integer, bukan teks. Secara leksikal, `"100"` dapat berada sebelum `"20"`, padahal urutan numeriknya terbalik. FILETIME juga harus dibandingkan sebagai raw tick; dua kejadian yang terpisah 100 ns dapat mempunyai tampilan mikrodetik yang sama setelah pembulatan. Python menyimpan integer uint64 ini secara tepat tanpa mengubahnya menjadi float.
+
+Nilai yang diketahui dan tidak diketahui dipisahkan. Ukuran `0` adalah nilai yang diketahui. Metadata tanpa deletion time valid serta orphan tanpa timestamp tetap berada di bagian tidak diketahui, dan tidak diberi tanggal dari filesystem payload. Nilai tidak diketahui ditempatkan di akhir pada arah naik maupun turun.
+
+Klik judul kolom mengubah urutan tabel, bukan `records`, `selection`, atau timeline analitis di JSON. Pengguna dapat mengurutkan tampilan Timeline menurut nama; untuk kembali melihat kronologi, pilih kolom waktu dalam arah naik. Ekspor tetap memakai kontrak renderer/report yang sama, sehingga mengubah urutan visual tidak diam-diam mengubah urutan audit yang disimpan.
+
+## 28. Ukuran teks dan validasi GUI
+
+Pengaturan teks desktop mempunyai batas 9–16 point dengan ukuran awal 11. Ia memperbarui font, tinggi baris, dan widget detail, termasuk jendela detail yang sedang terbuka. Kontrol ini tidak mengubah ukuran file bukti, isi metadata, hasil hashing, atau opsi analisis.
+
+Perubahan font perlu diuji sambil sebuah baris dipilih dan filter aktif. Pilihan, nilai filter, dan hash yang ditampilkan harus tetap menunjuk record yang sama. Layout juga perlu diperiksa pada jendela kecil, filter terbuka/tertutup, serta pembatas yang digeser agar progress, pembatalan, dan ekspor tetap dapat digunakan.
+
+Pengujian GUI bukan hanya memastikan sebuah jendela muncul. Skenario yang relevan mencakup pembacaan path panjang/Unicode, salin nilai yang benar, perubahan pilihan pada jendela detail, sorting lintas halaman dan batas uint64, serta data tanpa timestamp. Pengujian tersebut melengkapi parser/controller tests dan validasi artefak Windows; masing-masing menjawab jenis pertanyaan yang berbeda.

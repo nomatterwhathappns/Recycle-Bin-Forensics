@@ -31,18 +31,20 @@ the Python standard library unless a new dependency has a documented need.
 The desktop uses Tk from the selected Python installation. Check it with `python -m tkinter`. On a graphical development machine, enable native widget tests with:
 
 ```sh
-RBF_RUN_GUI=1 python -m pytest tests/test_gui.py -v
+RBF_RUN_GUI=1 python -m pytest tests/test_gui.py tests/test_detail_view.py -v
 ```
 
 In PowerShell, set `$env:RBF_RUN_GUI = '1'` before running pytest. The Linux GUI CI job uses a virtual display; ordinary test collection does not require one. Keep worker code independent from Tk widgets: send progress/results through the session queue and update widgets on the GUI thread. Cover cancellation and state transitions, including rejection of export after a cancelled or failed scan.
 
-Coverage has separate gates for the headless engine/controller and the native desktop. Default coverage omits only `gui.py`, because CLI-only hosts need no display. The desktop CI job measures that module independently with a real Tk display:
+Coverage has separate gates for the headless engine/controller and the native desktop. Default coverage omits the Tk presentation modules `gui.py` and `detail_view.py`, because CLI-only hosts need no display. The desktop CI job measures these modules independently with a real Tk display:
 
 ```sh
-RBF_RUN_GUI=1 python -m pytest tests/test_gui.py tests/test_gui_entry.py --cov=rbinforensics.gui --cov-config=tools/gui.coveragerc --cov-fail-under=85
+RBF_RUN_GUI=1 python -m pytest tests/test_gui.py tests/test_gui_entry.py tests/test_detail_view.py --cov=rbinforensics.gui --cov=rbinforensics.detail_view --cov-config=tools/gui.coveragerc --cov-fail-under=85
 ```
 
 Windows packaging uses `python tools/test_windows_gui.py` to give each scenario a fresh Python/Tcl process, matching the application's single-interpreter lifecycle. Every collected scenario must pass; coverage is appended across them and checked at the same 85% threshold. The runner does not retry or skip failing scenarios.
+
+For desktop changes, exercise small-window layout, pane resizing, detail-window selection changes, collapse/expand state, text scaling, and sorting across page boundaries. Keep displayed labels separate from evidence values: changing a font or sort order must not mutate `report`, reinterpret a timestamp, invent payload metadata, or reorder exported audit records.
 
 Build portable distributions on native Windows x64; PyInstaller does not cross-compile a Windows executable from Linux:
 

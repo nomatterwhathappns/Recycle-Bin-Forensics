@@ -29,6 +29,8 @@ except ImportError:
 from . import __version__
 from .analysis import FilterOptions, selected_records
 from .desktop import DesktopSession
+from .detail_view import DetailView
+from .presentation import record_label, sort_records
 from .reports import safe_text
 from .scan_control import ScanProgress
 from .scanner import ScanOptions
@@ -91,6 +93,15 @@ class DatePicker(tk.Toplevel if tk is not None else object):
                     ).grid(row=row, column=column, padx=1, pady=1)
 
 
+class WorkspacePane(tk.PanedWindow if tk is not None else object):
+    """Visible native resize handle, with a vertical sash position helper."""
+
+    def sashpos(self, index: int, position: int | None = None) -> int:
+        if position is not None:
+            self.sash_place(index, 0, position)
+        return self.sash_coord(index)[1]
+
+
 class ForensicsApp(tk.Tk if tk is not None else object):
     """A responsive scan/view/export workflow over one DesktopSession."""
 
@@ -105,7 +116,9 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         super().__init__()
         self.session = session or DesktopSession()
         self.title(f"Recycle Bin Forensics — {__version__}")
-        self.geometry("1280x840")
+        width = min(1280, max(1000, self.winfo_screenwidth() - 60))
+        height = min(840, max(700, self.winfo_screenheight() - 90))
+        self.geometry(f"{width}x{height}")
         self.minsize(1000, 700)
         self.configure(background=BG)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -114,6 +127,11 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self._awaiting_terminal = False
         self._poll_id = None
         self._last_export: Path | None = None
+        self.detail_window = None
+        self._sort_state: dict = {}
+        self._split_fraction = 0.48
+        self._sash_job = None
+        self._last_split_size = None
         self._inputs: list[tuple[object, str]] = []
         self._pages: dict[object, int] = {}
         self._datasets: dict[object, list[dict]] = {}
@@ -147,13 +165,20 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             "orphan_count": "—",
             "review_count": "—",
             "export_status": "",
+            "stats": "Metadata: - | Orphan: - | Perlu ditinjau: -",
+            "detail_title": "Detail temuan",
+            "font_label": "11 pt",
+            "selection_count": "",
         }.items():
             setattr(self, name + "_var", tk.StringVar(self, value=value))
         self.recursive_var = tk.BooleanVar(self, value=True)
         self.hash_var = tk.BooleanVar(self, value=False)
         self.case_visible = tk.BooleanVar(self, value=False)
+        self.filters_visible = tk.BooleanVar(self, value=False)
+        self.font_size_var = tk.IntVar(self, value=11)
 
     def _style(self) -> None:
+        size = self.font_size_var.get()
         families = {family.casefold() for family in tkfont.families(self)}
         self._ui_font = (
             "Segoe UI"
@@ -167,39 +192,46 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         )
         style = ttk.Style(self)
         style.theme_use("clam")
-        style.configure(".", font=(self._ui_font, 10), foreground=INK, background=BG)
+        tkfont.nametofont("TkTextFont", root=self).configure(family=self._ui_font, size=size)
+        tkfont.nametofont("TkDefaultFont", root=self).configure(family=self._ui_font, size=size)
+        style.configure(".", font=(self._ui_font, size), foreground=INK, background=BG)
+        style.configure("TEntry", font=(self._ui_font, size))
         style.configure("TFrame", background=BG)
         style.configure("Card.TFrame", background="white")
         style.configure("TLabel", background=BG)
         style.configure("Muted.TLabel", foreground=MUTED)
-        style.configure("Title.TLabel", font=(self._ui_font, 22, "bold"))
-        style.configure("Brand.TLabel", font=(self._ui_font, 15, "bold"))
+        style.configure("Title.TLabel", font=(self._ui_font, size + 10, "bold"))
+        style.configure("Brand.TLabel", font=(self._ui_font, size + 3, "bold"))
         style.configure("Count.TLabel", font=(self._ui_font, 23, "bold"), background="white")
         style.configure("Card.TLabel", background="white")
-        style.configure("TButton", padding=(12, 8), background="white", bordercolor="#cbd5dc")
+        style.configure("TButton", padding=(10, 5), background="white", bordercolor="#cbd5dc")
         style.map("TButton", background=[("active", "#e8f5f4"), ("disabled", BG)])
         style.configure("Accent.TButton", background=TEAL, foreground="white")
         style.map("Accent.TButton", background=[("disabled", "#a9bfbe"), ("active", "#05676c")])
-        style.configure("Treeview", background="white", fieldbackground="white", rowheight=31)
+        style.configure(
+            "Treeview", background="white", fieldbackground="white", rowheight=size * 2 + 10
+        )
         style.configure(
             "Treeview.Heading",
-            padding=(8, 8),
-            font=(self._ui_font, 10, "bold"),
+            padding=(6, 5),
+            font=(self._ui_font, size, "bold"),
             background="#edf2f5",
         )
         style.configure("TNotebook", borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(18, 10), background="#e7ecef")
+        style.configure("TNotebook.Tab", padding=(12, 5), background="#e7ecef")
         style.map(
             "TNotebook.Tab", background=[("selected", "white")], foreground=[("selected", TEAL)]
         )
-        style.configure("Horizontal.TProgressbar", background=TEAL, troughcolor="#dde6e8")
+        style.configure(
+            "Horizontal.TProgressbar", background=TEAL, troughcolor="#dde6e8", thickness=8
+        )
 
     def _input(self, widget, state: str = "normal"):
         self._inputs.append((widget, state))
         return widget
 
     def _build(self) -> None:
-        top = ttk.Frame(self, padding=(24, 18))
+        top = ttk.Frame(self, padding=(18, 7))
         top.pack(fill="x")
         ttk.Label(top, text="RB   Recycle Bin Forensics", style="Brand.TLabel").pack(side="left")
         ttk.Label(top, text=f"v{__version__}   ·   Lokal / offline", foreground=TEAL).pack(
@@ -208,7 +240,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=24)
         self.scan_page = ttk.Frame(self.notebook, padding=22)
-        self.results_page = ttk.Frame(self.notebook, padding=16)
+        self.results_page = ttk.Frame(self.notebook, padding=(12, 6))
         self.help_page = ttk.Frame(self.notebook, padding=22)
         for page, label in (
             (self.scan_page, "Analisis baru"),
@@ -219,10 +251,10 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self._build_scan()
         self._build_results()
         self._build_help()
-        bottom = ttk.Frame(self, padding=(24, 12))
+        bottom = ttk.Frame(self, padding=(18, 6))
         bottom.pack(side="bottom", fill="x", before=self.notebook)
         self.progress = ttk.Progressbar(bottom, mode="indeterminate")
-        self.progress.pack(fill="x", pady=(0, 8))
+        self.progress.pack(fill="x", pady=(0, 5))
         self.cancel_button = ttk.Button(bottom, text="Batalkan", command=self.cancel_scan)
         self.cancel_button.pack(side="right")
         self.status_label = ttk.Label(
@@ -346,6 +378,9 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         bar = ttk.Frame(parent)
         bar.pack(fill="x")
         ttk.Label(bar, text="Hasil analisis", style="Brand.TLabel").pack(side="left")
+        ttk.Label(bar, textvariable=self.selection_count_var, style="Muted.TLabel").pack(
+            side="left", padx=10
+        )
         self.export_buttons = []
         for format_name in ("html", "json", "csv"):
             button = ttk.Button(
@@ -353,44 +388,63 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 text=f"Ekspor {format_name.upper()}",
                 command=lambda f=format_name: self.export_report(f),
             )
-            button.pack(side="right", padx=(6, 0))
+            button.pack(side="right", padx=(4, 0))
             self.export_buttons.append(button)
-        counts = ttk.Frame(parent)
-        counts.pack(fill="x", pady=12)
-        for label, variable in (
-            ("Metadata terbaca", self.metadata_count_var),
-            ("Orphan payload", self.orphan_count_var),
-            ("Perlu ditinjau", self.review_count_var),
-        ):
-            card = ttk.Frame(counts, style="Card.TFrame", padding=(16, 9))
-            card.pack(side="left", fill="x", expand=True, padx=(0, 8))
-            ttk.Label(card, text=label, style="Card.TLabel").pack(anchor="w")
-            ttk.Label(card, textvariable=variable, style="Count.TLabel").pack(anchor="w")
-        ttk.Label(parent, textvariable=self.summary_var, style="Muted.TLabel").pack(anchor="w")
-        ttk.Label(
-            parent, textvariable=self.run_context_var, style="Muted.TLabel", wraplength=1100
-        ).pack(anchor="w", pady=(4, 0))
-        filters = ttk.LabelFrame(parent, text=" Filter hasil — tanggal UTC ", padding=10)
-        filters.pack(fill="x", pady=10)
-        self.filter_inputs = []
+        fonts = ttk.Frame(bar)
+        fonts.pack(side="right", padx=12)
+        self.font_smaller = ttk.Button(
+            fonts, text="A-", width=3, command=lambda: self.change_font_size(-1)
+        )
+        self.font_smaller.pack(side="left")
+        ttk.Label(fonts, textvariable=self.font_label_var).pack(side="left", padx=5)
+        self.font_larger = ttk.Button(
+            fonts, text="A+", width=3, command=lambda: self.change_font_size(1)
+        )
+        self.font_larger.pack(side="left")
+        context_row = ttk.Frame(parent)
+        context_row.pack(fill="x", pady=4)
+        ttk.Label(context_row, textvariable=self.stats_var, foreground=TEAL).pack(
+            side="right", padx=(10, 0)
+        )
+        context = ttk.Entry(
+            context_row, textvariable=self.run_context_var, state="readonly", width=20
+        )
+        context.pack(side="left", fill="x", expand=True)
+        self.run_context_entry = context
+        quick = ttk.Frame(parent)
+        quick.pack(fill="x", pady=(0, 4))
+        ttk.Label(quick, text="Cari path / nama").pack(side="left", padx=(0, 8))
+        query = ttk.Entry(quick, textvariable=self.query_var, width=20)
+        self.filter_toggle = ttk.Button(quick, text="Filter lanjutan", command=self.toggle_filters)
+        self.filter_toggle.pack(side="right")
+        self.reset_button = ttk.Button(quick, text="Reset", command=self.reset_filters)
+        self.reset_button.pack(side="right", padx=4)
+        self.apply_button = ttk.Button(quick, text="Terapkan", command=self.apply_filters)
+        self.apply_button.pack(side="right")
+        query.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        query.bind("<Return>", lambda _: self.apply_filters())
+        self.filter_inputs = [query]
+        self.advanced_filters = ttk.LabelFrame(
+            parent, text="Filter lanjutan - tanggal UTC", padding=8
+        )
+        self._advanced_anchor = quick
         fields = (
-            ("Cari path / nama", self.query_var, 27),
             ("Ekstensi (.pdf,.docx)", self.extension_var, 18),
             ("SID", self.sid_var, 24),
-            ("Ukuran min (byte)", self.min_size_var, 14),
-            ("Ukuran maks (byte)", self.max_size_var, 14),
+            ("Ukuran min (byte)", self.min_size_var, 12),
+            ("Ukuran maks (byte)", self.max_size_var, 12),
         )
         for column, (label, variable, width) in enumerate(fields):
-            frame = ttk.Frame(filters)
+            frame = ttk.Frame(self.advanced_filters)
             frame.grid(row=0, column=column, sticky="ew", padx=4)
             ttk.Label(frame, text=label).pack(anchor="w")
             entry = ttk.Entry(frame, textvariable=variable, width=width)
-            entry.pack(fill="x", pady=4)
+            entry.pack(fill="x", pady=3)
             entry.bind("<Return>", lambda _: self.apply_filters())
             self.filter_inputs.append(entry)
-            filters.columnconfigure(column, weight=1)
-        dates = ttk.Frame(filters)
-        dates.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(6, 0))
+            self.advanced_filters.columnconfigure(column, weight=1)
+        dates = ttk.Frame(self.advanced_filters)
+        dates.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         for label, variable in (("Dari", self.after_var), ("Sampai", self.before_var)):
             ttk.Label(dates, text=label).pack(side="left", padx=(4, 6))
             entry = ttk.Entry(dates, textvariable=variable, width=23)
@@ -400,42 +454,50 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             )
             button.pack(side="left", padx=(4, 12))
             self.filter_inputs.extend((entry, button))
-        self.apply_button = ttk.Button(dates, text="Terapkan", command=self.apply_filters)
-        self.apply_button.pack(side="right", padx=4)
-        self.reset_button = ttk.Button(dates, text="Reset", command=self.reset_filters)
-        self.reset_button.pack(side="right")
-        ttk.Label(parent, textvariable=self.selection_var, style="Muted.TLabel").pack(
-            anchor="w", pady=(0, 6)
+        self.results_split = WorkspacePane(
+            parent,
+            orient="vertical",
+            sashwidth=10,
+            showhandle=True,
+            handlesize=10,
+            sashrelief="raised",
+            background=BG,
+            borderwidth=0,
+            opaqueresize=True,
         )
-        split = ttk.Panedwindow(parent, orient="horizontal")
-        split.pack(fill="both", expand=True)
-        left = ttk.Frame(split)
-        right = ttk.Frame(split, padding=(12, 0, 0, 0))
-        split.add(left, weight=3)
-        split.add(right, weight=2)
-        tabs = ttk.Notebook(left)
-        tabs.pack(fill="both", expand=True)
+        self.results_split.pack(fill="both", expand=True)
+        self._table_frame = ttk.Frame(self.results_split)
+        self._detail_frame = ttk.Frame(self.results_split)
+        self.results_split.add(self._table_frame, minsize=100, stretch="always")
+        self.results_split.add(self._detail_frame, minsize=150, stretch="always")
+        self.results_split.bind("<Configure>", self._queue_split_layout)
+        self.results_split.bind("<ButtonRelease-1>", self._remember_split, add="+")
+        self.result_tabs = ttk.Notebook(self._table_frame)
+        self.result_tabs.pack(fill="both", expand=True)
+        self.result_tabs.bind("<<NotebookTabChanged>>", self._result_tab_changed)
         for attr, label in (
             ("inventory", "Inventaris"),
             ("timeline", "Timeline"),
             ("review", "Perlu ditinjau"),
         ):
-            page = ttk.Frame(tabs)
-            tabs.add(page, text=label)
+            page = ttk.Frame(self.result_tabs)
+            self.result_tabs.add(page, text=label)
             tree = ttk.Treeview(
                 page,
                 columns=("path", "time", "size", "status"),
                 show="headings",
                 selectmode="browse",
+                height=5,
             )
             setattr(self, attr, tree)
+            self._sort_state[tree] = None
             for key, title, width in (
-                ("path", "Path asli / artefak", 310),
+                ("path", "Path asli / artefak", 500),
                 ("time", "Dihapus (UTC)", 245),
-                ("size", "Byte", 100),
-                ("status", "Status", 110),
+                ("size", "Byte", 110),
+                ("status", "Status", 150),
             ):
-                tree.heading(key, text=title)
+                tree.heading(key, text=title, command=lambda t=tree, c=key: self.sort_table(t, c))
                 tree.column(key, width=width, minwidth=65, stretch=key == "path")
             tree.tag_configure("warning", foreground="#8c560b")
             tree.tag_configure("error", foreground="#b52d43")
@@ -448,7 +510,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             scrollbar.grid(row=0, column=1, sticky="ns")
             horizontal.grid(row=1, column=0, sticky="ew")
             footer = ttk.Frame(page)
-            footer.grid(row=2, column=0, columnspan=2, sticky="ew", pady=6)
+            footer.grid(row=2, column=0, columnspan=2, sticky="ew", pady=3)
             previous = ttk.Button(
                 footer, text="<", width=3, command=lambda t=tree: self._change_page(t, -1)
             )
@@ -466,31 +528,29 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self._row_objects[tree] = {}
             page.columnconfigure(0, weight=1)
             page.rowconfigure(0, weight=1)
-        ttk.Label(right, text="Detail temuan", style="Brand.TLabel").pack(anchor="w", pady=(0, 8))
-        self.details = tk.Text(
-            right,
-            wrap="word",
-            borderwidth=0,
-            background="white",
-            foreground=INK,
-            font=(self._mono_font, 10),
-            padx=12,
-            pady=12,
-            width=38,
-            state="disabled",
+        detail_header = ttk.Frame(self._detail_frame)
+        self.detail_header = detail_header
+        detail_header.pack(fill="x", pady=(2, 4))
+        self.detail_button = ttk.Button(
+            detail_header, text="Perbesar detail", command=self.open_details
         )
-        detail_scroll = ttk.Scrollbar(right, command=self.details.yview)
-        self.details.configure(yscrollcommand=detail_scroll.set)
-        detail_scroll.pack(side="right", fill="y")
-        self.details.pack(fill="both", expand=True)
-        detail_buttons = ttk.Frame(right)
-        detail_buttons.pack(side="bottom", fill="x", pady=(6, 0), before=self.details)
-        ttk.Button(detail_buttons, text="Salin detail", command=self.copy_details).pack(side="left")
-        ttk.Button(detail_buttons, text="Salin hash", command=self.copy_hash).pack(
-            side="left", padx=6
+        self.detail_button.pack(side="right")
+        ttk.Label(detail_header, textvariable=self.detail_title_var, style="Brand.TLabel").pack(
+            side="left"
         )
+        ttk.Label(
+            detail_header, text="Tarik pembatas untuk mengatur tinggi", style="Muted.TLabel"
+        ).pack(side="right", padx=12)
+        self.detail_panel = DetailView(
+            self._detail_frame,
+            ui_font=self._ui_font,
+            mono_font=self._mono_font,
+            font_size=self.font_size_var.get(),
+            on_status=self.status_var.set,
+        )
+        self.detail_panel.pack(fill="both", expand=True)
         export_bar = ttk.Frame(parent)
-        export_bar.pack(side="bottom", fill="x", pady=(8, 0), before=split)
+        export_bar.pack(side="bottom", fill="x", pady=(4, 0), before=self.results_split)
         self.open_button = ttk.Button(
             export_bar, text="Buka laporan HTML", command=self.open_report
         )
@@ -502,6 +562,159 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         ttk.Label(
             export_bar, textvariable=self.export_status_var, style="Muted.TLabel", wraplength=420
         ).pack(side="left", fill="x", expand=True)
+
+    def toggle_filters(self) -> None:
+        visible = not self.filters_visible.get()
+        self.filters_visible.set(visible)
+        if visible:
+            self.advanced_filters.pack(fill="x", pady=(0, 6), after=self._advanced_anchor)
+        else:
+            self.advanced_filters.pack_forget()
+        self._update_filter_indicator()
+
+    def _update_filter_indicator(self) -> None:
+        filters = (self.session.view or {}).get("selection", {}).get("filters", {})
+        count = sum(
+            value is not None and value != [] and value != ""
+            for key, value in filters.items()
+            if key != "query"
+        )
+        title = "Tutup filter" if self.filters_visible.get() else "Filter lanjutan"
+        self.filter_toggle.configure(text=title + (f" ({count} aktif)" if count else ""))
+
+    def _queue_split_layout(self, _event=None) -> None:
+        if _event is not None:
+            size = (_event.width, _event.height)
+            if size == self._last_split_size:
+                return
+            self._last_split_size = size
+        if self._sash_job is not None:
+            self.after_cancel(self._sash_job)
+        self._sash_job = self.after_idle(self._place_split)
+
+    def _place_split(self) -> None:
+        self._sash_job = None
+        height = self.results_split.winfo_height()
+        if height < 120:
+            return
+        usable = max(1, height - 10)
+        active = self.result_tabs.select()
+        tree = next((tree for tree in self._datasets if str(tree.master) == active), self.inventory)
+        table_chrome = max(
+            self.result_tabs.winfo_reqheight() - tree.winfo_reqheight(),
+            0,
+        )
+        detail_chrome = self.detail_header.winfo_reqheight() + 6
+        wanted_table = table_chrome + 100
+        wanted_detail = detail_chrome + 150
+        if usable >= wanted_table + wanted_detail:
+            table_min, detail_min = wanted_table, wanted_detail
+        else:
+            table_min = min(wanted_table, int(usable * 0.48))
+            detail_min = min(wanted_detail, int(usable * 0.5))
+        self.results_split.paneconfigure(self._table_frame, minsize=table_min)
+        self.results_split.paneconfigure(self._detail_frame, minsize=detail_min)
+        position = max(
+            table_min + 1, min(int(usable * self._split_fraction), usable - detail_min - 1)
+        )
+        self.results_split.sash_place(0, 0, position)
+
+    def _remember_split(self, _event=None) -> None:
+        height = self.results_split.winfo_height()
+        if height > 10:
+            self._split_fraction = max(
+                0.15, min(0.85, self.results_split.sash_coord(0)[1] / (height - 10))
+            )
+
+    def change_font_size(self, delta: int) -> None:
+        size = max(9, min(16, self.font_size_var.get() + delta))
+        self.font_size_var.set(size)
+        self.font_label_var.set(f"{size} pt")
+        self._style()
+        self._help_text.configure(font=(self._ui_font, size + 1))
+        self.detail_panel.set_font_size(size)
+        if self.detail_window is not None and self.detail_window.winfo_exists():
+            self.detail_window.detail_view.set_font_size(size)
+        self._queue_split_layout()
+        self._sync_controls()
+
+    def sort_table(self, tree, column: str) -> None:
+        if self._closing:
+            return
+        previous = self._sort_state[tree]
+        descending = not previous[1] if previous is not None and previous[0] == column else False
+        self._sort_state[tree] = (column, descending)
+        self._datasets[tree] = sort_records(self._datasets[tree], column, descending)
+        self._pages[tree] = 0
+        self._update_sort_heading(tree)
+        self._display_page(tree)
+
+    def _update_sort_heading(self, tree) -> None:
+        state = self._sort_state[tree]
+        titles = {
+            "path": "Path asli / artefak",
+            "time": "Dihapus (UTC)",
+            "size": "Byte",
+            "status": "Status",
+        }
+        for column, title in titles.items():
+            suffix = (" [turun]" if state[1] else " [naik]") if state and state[0] == column else ""
+            tree.heading(column, text=title + suffix)
+
+    def _result_tab_changed(self, _event=None) -> None:
+        if not hasattr(self, "detail_panel"):
+            return
+        active = self.result_tabs.select()
+        tree = next((tree for tree in self._datasets if str(tree.master) == active), None)
+        if tree is None:
+            self._update_detail_views(None)
+        else:
+            self._show_details(tree)
+
+    def open_details(self) -> None:
+        record = getattr(self, "_selected_record", None)
+        if record is None:
+            return
+        if self.detail_window is None or not self.detail_window.winfo_exists():
+            window = tk.Toplevel(self)
+            window.title("Detail temuan")
+            window.geometry(
+                f"{min(1100, max(700, self.winfo_screenwidth() - 100))}x{min(760, max(450, self.winfo_screenheight() - 120))}"
+            )
+            window.minsize(640, 420)
+            window.detail_view = DetailView(
+                window,
+                ui_font=self._ui_font,
+                mono_font=self._mono_font,
+                font_size=self.font_size_var.get(),
+                on_status=self.status_var.set,
+            )
+            window.detail_view.pack(fill="both", expand=True, padx=16, pady=12)
+            window.protocol("WM_DELETE_WINDOW", self._close_details)
+            self.detail_window = window
+        self.detail_window.detail_view.set_record(record)
+        self.detail_window.title("Detail temuan - " + safe_text(record["source_name"]))
+        self.detail_window.deiconify()
+        self.detail_window.lift()
+
+    def _close_details(self) -> None:
+        if self.detail_window is not None:
+            self.detail_window.destroy()
+            self.detail_window = None
+
+    def _update_detail_views(self, record: dict | None) -> None:
+        self._selected_record = record
+        self.detail_panel.set_record(record)
+        self.detail_title_var.set(
+            "Detail: " + safe_text(record["source_name"]) if record else "Detail temuan"
+        )
+        if self.detail_window is not None and self.detail_window.winfo_exists():
+            self.detail_window.detail_view.set_record(record)
+            self.detail_window.title(
+                "Detail temuan - "
+                + (safe_text(record["source_name"]) if record else "Pilih record")
+            )
+        self._sync_controls()
 
     def _build_help(self) -> None:
         text = (
@@ -529,6 +742,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             pady=20,
             font=(self._ui_font, 11),
         )
+        self._help_text = help_text
         help_text.pack(fill="both", expand=True)
         help_text.insert("1.0", text)
         help_text.configure(state="disabled")
@@ -642,6 +856,8 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.metadata_count_var.set("—")
         self.orphan_count_var.set("—")
         self.review_count_var.set("—")
+        self.stats_var.set("Metadata: - | Orphan: - | Perlu ditinjau: -")
+        self.selection_count_var.set("")
         self.summary_var.set("Belum ada hasil lengkap untuk scan ini.")
         self.run_context_var.set("Belum ada sumber hasil yang lengkap.")
         self.selection_var.set("")
@@ -664,12 +880,18 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.metadata_count_var.set(str(summary["parsed"]))
         self.orphan_count_var.set(str(summary["orphan_payloads"]))
         self.review_count_var.set(str(sum(bool(record["issues"]) for record in records)))
+        self.stats_var.set(
+            f"Metadata {summary['parsed']} | Orphan {summary['orphan_payloads']} | "
+            f"Tinjau {self.review_count_var.get()} | Error {summary['errors']} | "
+            f"Skip {summary['skipped']} | Hash {summary['payloads_hashed']}"
+        )
         self.summary_var.set(
             f"Seluruh scan: {len(records)} record · {summary['errors']} error · {summary['skipped']} dilewati · {summary['payloads_hashed']} hash payload"
         )
         selection = report["selection"]
+        self.selection_count_var.set(f"Pilihan {selection['matched']}/{len(records)}")
         self.selection_var.set(
-            f"Pilihan: {selection['matched']} ditampilkan / {len(records)} total. Diagnostik wajib tetap terlihat. Tanggal filter memakai UTC."
+            f"Pilihan: {selection['matched']} / {len(records)} record. Error/dilewati selalu terlihat; tanggal filter UTC."
         )
         self._datasets[self.inventory] = selected_records(report)
         by_source = {
@@ -682,8 +904,13 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         ]
         self._datasets[self.review] = [record for record in records if record["issues"]]
         for tree in self._datasets:
+            state = self._sort_state[tree]
+            if state is not None:
+                self._datasets[tree] = sort_records(self._datasets[tree], state[0], state[1])
+            self._update_sort_heading(tree)
             self._pages[tree] = 0
             self._display_page(tree)
+        self._update_filter_indicator()
         self._set_details("Pilih baris hasil untuk melihat detail.")
         self._selected_record = None
         self.notebook.select(self.results_page)
@@ -694,8 +921,8 @@ class ForensicsApp(tk.Tk if tk is not None else object):
 
     def _display_page(self, tree) -> None:
         self._selected_record = None
-        if hasattr(self, "details"):
-            self._set_details("Pilih baris hasil untuk melihat detail.")
+        if hasattr(self, "detail_panel"):
+            self._update_detail_views(None)
         records = self._datasets[tree]
         maximum = max(0, (len(records) - 1) // PAGE_SIZE)
         page = min(max(0, self._pages[tree]), maximum)
@@ -729,79 +956,23 @@ class ForensicsApp(tk.Tk if tk is not None else object):
 
     @staticmethod
     def _record_label(record: dict) -> str:
-        if record["status"] == "error":
-            return "Error"
-        if record["status"] == "skipped":
-            return "Dilewati"
-        if record["record_type"] == "orphan_payload":
-            return "Orphan"
-        if (record["payload"] or {}).get("status") == "missing":
-            return "Payload hilang"
-        return "Perlu ditinjau" if record["status"] == "warning" else "OK"
+        return record_label(record)
 
-    def _set_details(self, text: str) -> None:
-        self.details.configure(state="normal")
-        self.details.delete("1.0", "end")
-        self.details.insert("1.0", text)
-        self.details.configure(state="disabled")
+    def _set_details(self, _text: str) -> None:
+        self._update_detail_views(None)
 
     def _show_details(self, tree) -> None:
+        if str(tree.master) != self.result_tabs.select():
+            return
         selection = tree.selection()
         record = self._row_objects[tree].get(selection[0]) if selection else None
-        if record is None:
-            self._selected_record = None
-            self._set_details("Pilih baris hasil untuk melihat detail.")
-            return
-        self._selected_record = record
-        metadata, payload = record["metadata"] or {}, record["payload"] or {}
-        fields = (
-            ("Jenis record", record["record_type"]),
-            ("Status", record["status"]),
-            ("Path bukti", record["source_path"]),
-            ("Path asli", metadata.get("original_path")),
-            ("Ukuran asli (byte)", metadata.get("original_size")),
-            ("Dihapus UTC", metadata.get("deleted_at_utc")),
-            ("Waktu tampilan", metadata.get("deleted_at_display")),
-            ("FILETIME mentah", metadata.get("deletion_filetime")),
-            ("Versi metadata", metadata.get("format_version")),
-            ("SID (konteks)", record.get("sid")),
-            ("SHA-256 sumber", record.get("source_sha256")),
-            ("Status payload", payload.get("status")),
-            ("Path payload", payload.get("path")),
-            ("Ukuran payload (byte)", payload.get("size")),
-            ("SHA-256 payload", payload.get("sha256")),
-            ("Status hash", payload.get("hash_status")),
-        )
-        text = "\n\n".join(
-            label
-            + ":\n"
-            + (safe_text(value) if value is not None else "Tidak diketahui / tidak tersedia")
-            for label, value in fields
-        )
-        if record["issues"]:
-            text += "\n\nMasalah yang perlu ditinjau:\n" + "\n".join(
-                f"[{issue['severity']}] {safe_text(issue['code'])}: {safe_text(issue['message'])}"
-                for issue in record["issues"]
-            )
-        self._set_details(text)
+        self._update_detail_views(record)
 
     def copy_details(self) -> None:
-        self.clipboard_clear()
-        self.clipboard_append(self.details.get("1.0", "end-1c"))
+        self.detail_panel.copy_details()
 
     def copy_hash(self) -> None:
-        record = getattr(self, "_selected_record", None)
-        if record:
-            value = (record["payload"] or {}).get("sha256") or record.get("source_sha256")
-            if value:
-                self.clipboard_clear()
-                self.clipboard_append(value)
-                source = (
-                    "payload $R"
-                    if (record["payload"] or {}).get("sha256")
-                    else "sumber " + record["record_type"]
-                )
-                self.status_var.set("SHA-256 " + source + " disalin.")
+        self.detail_panel.copy_hash()
 
     def export_report(self, format_name: str, destination: Path | None = None) -> None:
         if self.session.state != "complete" or self._awaiting_terminal:
@@ -881,6 +1052,18 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.location_button.configure(
             state="normal" if self._last_export and not busy else "disabled"
         )
+        self.detail_button.configure(
+            state="normal"
+            if getattr(self, "_selected_record", None) is not None and not self._closing
+            else "disabled"
+        )
+        self.font_smaller.configure(
+            state="normal" if self.font_size_var.get() > 9 and not self._closing else "disabled"
+        )
+        self.font_larger.configure(
+            state="normal" if self.font_size_var.get() < 16 and not self._closing else "disabled"
+        )
+        self.filter_toggle.configure(state="disabled" if self._closing else "normal")
 
     def _update_progress(self, event: ScanProgress) -> None:
         if self._closing or self._cancel_requested:
@@ -974,6 +1157,10 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self.destroy()
 
     def destroy(self) -> None:
+        if self._sash_job is not None:
+            self.after_cancel(self._sash_job)
+            self._sash_job = None
+        self._close_details()
         if self._poll_id is not None:
             self.after_cancel(self._poll_id)
             self._poll_id = None
@@ -1031,7 +1218,7 @@ def _smoke_test(destination: Path) -> int:
             app.inventory.selection_set(rows[0])
             app.inventory.event_generate("<<TreeviewSelect>>")
             app.update()
-            assert "smoke.txt" in app.details.get("1.0", "end")
+            assert "smoke.txt" in app.detail_panel.get_text()
             for format_name in ("json", "html"):
                 output = root / ("report." + format_name)
                 app.export_report(format_name, output)

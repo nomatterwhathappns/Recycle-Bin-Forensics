@@ -1,4 +1,4 @@
-# Recycle Bin Forensics 1.1
+# Recycle Bin Forensics 1.2
 
 An offline desktop application and Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
@@ -7,6 +7,8 @@ An offline desktop application and Python command-line toolkit for examining mod
 ## What it does
 
 - Offers a local desktop interface for choosing evidence, scanning, reviewing details, and exporting reports.
+- Provides a larger adjustable results workspace, grouped details that can open in a separate window, foldable filters, and text-size controls.
+- Sorts the complete desktop selection by path, exact deletion time, size, or status before pagination.
 - Keeps the desktop responsive with background work, truthful progress, and cooperative cancellation.
 - Parses `$I` format versions 1 and 2, including strict UTF-16LE paths.
 - Preserves raw 64-bit FILETIME and seven-digit UTC timestamp fractions.
@@ -25,9 +27,11 @@ The parser treats decoded Windows paths as evidence text. It never opens those p
 
 The desktop interface uses Indonesian labels: **Analisis baru**, **Hasil analisis**, and **Panduan**. It runs locally and uses the same analysis engine and report formats as the CLI. See the [desktop user guide](docs/DESKTOP.md) for the complete workflow.
 
+Version 1.2 places the full-width detail pane below the results table. Drag the separator to adjust their heights, or use **Perbesar detail** to review the selected record in a resizable window. Metadata decoding and payload availability have separate labels, so successful parsing is not confused with available content. Advanced filters can be folded away, and text size can be adjusted for the screen.
+
 ![Desktop results from fictitious demo artifacts](docs/images/desktop-results.png)
 
-The preview uses synthetic data. Native controls and fonts can differ between operating systems.
+The preview uses synthetic data. See also the [compact 1366×768 workspace](docs/images/desktop-compact.png) and [enlarged detail window](docs/images/desktop-detail.png). Native controls and fonts can differ between operating systems.
 
 ### Windows portable package
 
@@ -188,9 +192,21 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-**Application version `1.1.0` and report schema version `2.0` are separate contracts.** Desktop controls, progress, and cancellation do not change the completed-report schema. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+**Application version `1.2.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
 
 Feature additions increment the minor version (`1.0.0` to `1.1.0`); compatible bug fixes increment the patch version (`1.1.0` to `1.1.1`). A compatibility-breaking application change increments the major version. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
+To update an existing source checkout on Parrot or another Linux desktop, close the application, enter its repository directory, and run:
+
+```sh
+git pull --ff-only
+source .venv/bin/activate
+python -m pip install '.[timezone]'
+rbf --version
+rbf-gui
+```
+
+The version command should report `rbf 1.2.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
 
 ## Development and validation
 

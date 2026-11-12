@@ -26,7 +26,7 @@ def smoke_result() -> dict:
 
 def test_installed_distribution_and_cli_module_use_same_version() -> None:
     assert importlib.metadata.version("rbinforensics") == __version__
-    assert __version__ == "1.1.0"
+    assert __version__ == "1.2.0"
 
 
 def test_runtime_licenses_preserve_installed_timezone_notices():
