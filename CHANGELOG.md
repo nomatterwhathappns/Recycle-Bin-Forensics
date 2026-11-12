@@ -7,6 +7,7 @@
 - A full-width detail area below the results table, with an adjustable table/detail separator.
 - A resizable separate detail window and grouped summary, metadata, payload, and hash/source fields.
 - Quick search with foldable advanced filters, a compact full-scan summary, and adjustable desktop text size.
+- A responsive toolbar and date inputs that preserve button access on narrow windows with enlarged text.
 - Clickable desktop column headings to sort the complete view by path, deletion time, size, or status before pagination.
 - Presentation and native-widget regression coverage for detail selection, sorting precision, font changes, and workspace sizing.
 

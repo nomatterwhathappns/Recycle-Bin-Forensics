@@ -98,7 +98,7 @@ Tables show up to 200 records per page. Use the arrow buttons and range counter 
 
 ### Give the table or details more room
 
-Drag the horizontal separator between the table and detail area to change their relative heights. The areas retain usable minimum sizes. **Perbesar detail** opens the selected record in a separate resizable window, which can be maximized through the operating system. The enlarged window follows the current selection; clearing a selection, changing pages, or starting another scan must not leave a different record looking current in that window.
+Drag the horizontal separator between the table and detail area to change their relative heights. On a small screen with large text, fold the advanced filters away after applying them to give the results room; the toolbar uses an extra row when its controls need it. **Perbesar detail** opens the selected record in a separate resizable window, which can be maximized through the operating system. The enlarged window follows the current selection; clearing a selection, changing pages, or starting another scan must not leave a different record looking current in that window.
 
 Compare the [compact workspace preview](images/desktop-compact.png) with the [enlarged detail preview](images/desktop-detail.png). Both use fictitious demonstration records.
 

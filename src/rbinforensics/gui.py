@@ -231,7 +231,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         return widget
 
     def _build(self) -> None:
-        top = ttk.Frame(self, padding=(18, 7))
+        top = ttk.Frame(self, padding=(18, 5))
         top.pack(fill="x")
         ttk.Label(top, text="RB   Recycle Bin Forensics", style="Brand.TLabel").pack(side="left")
         ttk.Label(top, text=f"v{__version__}   ·   Lokal / offline", foreground=TEAL).pack(
@@ -240,7 +240,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=24)
         self.scan_page = ttk.Frame(self.notebook, padding=22)
-        self.results_page = ttk.Frame(self.notebook, padding=(12, 6))
+        self.results_page = ttk.Frame(self.notebook, padding=(12, 4))
         self.help_page = ttk.Frame(self.notebook, padding=22)
         for page, label in (
             (self.scan_page, "Analisis baru"),
@@ -377,20 +377,33 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         parent = self.results_page
         bar = ttk.Frame(parent)
         bar.pack(fill="x")
-        ttk.Label(bar, text="Hasil analisis", style="Brand.TLabel").pack(side="left")
-        ttk.Label(bar, textvariable=self.selection_count_var, style="Muted.TLabel").pack(
+        bar.columnconfigure(0, weight=1)
+        heading = ttk.Frame(bar)
+        heading.grid(row=0, column=0, sticky="w")
+        ttk.Label(heading, text="Hasil analisis", style="Brand.TLabel").pack(side="left")
+        ttk.Label(heading, textvariable=self.selection_count_var, style="Muted.TLabel").pack(
             side="left", padx=10
         )
+        controls = ttk.Frame(bar)
+        controls.grid(row=0, column=1, sticky="e")
+
+        def fit_toolbar(_event=None) -> None:
+            stacked = heading.winfo_reqwidth() + controls.winfo_reqwidth() > bar.winfo_width()
+            controls.grid_configure(row=1 if stacked else 0, column=0 if stacked else 1)
+
+        bar.bind("<Configure>", fit_toolbar)
+        heading.bind("<Configure>", fit_toolbar)
+        controls.bind("<Configure>", fit_toolbar)
         self.export_buttons = []
         for format_name in ("html", "json", "csv"):
             button = ttk.Button(
-                bar,
+                controls,
                 text=f"Ekspor {format_name.upper()}",
                 command=lambda f=format_name: self.export_report(f),
             )
             button.pack(side="right", padx=(4, 0))
             self.export_buttons.append(button)
-        fonts = ttk.Frame(bar)
+        fonts = ttk.Frame(controls)
         fonts.pack(side="right", padx=12)
         self.font_smaller = ttk.Button(
             fonts, text="A-", width=3, command=lambda: self.change_font_size(-1)
@@ -402,7 +415,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         )
         self.font_larger.pack(side="left")
         context_row = ttk.Frame(parent)
-        context_row.pack(fill="x", pady=4)
+        context_row.pack(fill="x", pady=2)
         ttk.Label(context_row, textvariable=self.stats_var, foreground=TEAL).pack(
             side="right", padx=(10, 0)
         )
@@ -445,14 +458,19 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self.advanced_filters.columnconfigure(column, weight=1)
         dates = ttk.Frame(self.advanced_filters)
         dates.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-        for label, variable in (("Dari", self.after_var), ("Sampai", self.before_var)):
-            ttk.Label(dates, text=label).pack(side="left", padx=(4, 6))
-            entry = ttk.Entry(dates, textvariable=variable, width=23)
-            entry.pack(side="left")
+        for column, (label, variable) in enumerate(
+            (("Dari", self.after_var), ("Sampai", self.before_var))
+        ):
+            dates.columnconfigure(column, weight=1, uniform="date")
+            field = ttk.Frame(dates)
+            field.grid(row=0, column=column, sticky="ew", padx=4)
+            ttk.Label(field, text=label).pack(side="left", padx=(0, 6))
+            entry = ttk.Entry(field, textvariable=variable, width=23)
             button = ttk.Button(
-                dates, text="Kalender", command=lambda v=variable: DatePicker(self, v)
+                field, text="Kalender", command=lambda v=variable: DatePicker(self, v)
             )
-            button.pack(side="left", padx=(4, 12))
+            button.pack(side="right", padx=(4, 0))
+            entry.pack(side="left", fill="x", expand=True)
             self.filter_inputs.extend((entry, button))
         self.results_split = WorkspacePane(
             parent,
@@ -530,7 +548,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             page.rowconfigure(0, weight=1)
         detail_header = ttk.Frame(self._detail_frame)
         self.detail_header = detail_header
-        detail_header.pack(fill="x", pady=(2, 4))
+        detail_header.pack(fill="x", pady=(0, 2))
         self.detail_button = ttk.Button(
             detail_header, text="Perbesar detail", command=self.open_details
         )
@@ -604,14 +622,17 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self.result_tabs.winfo_reqheight() - tree.winfo_reqheight(),
             0,
         )
-        detail_chrome = self.detail_header.winfo_reqheight() + 6
+        detail_chrome = self.detail_header.winfo_reqheight() + 2
         wanted_table = table_chrome + 100
         wanted_detail = detail_chrome + 150
         if usable >= wanted_table + wanted_detail:
             table_min, detail_min = wanted_table, wanted_detail
         else:
-            table_min = min(wanted_table, int(usable * 0.48))
-            detail_min = min(wanted_detail, int(usable * 0.5))
+            # Share a genuine shortfall in proportion to the requested space;
+            # crossing the threshold by one pixel must not discard a row.
+            available = max(1, usable - 2)
+            table_min = int(available * wanted_table / (wanted_table + wanted_detail))
+            detail_min = available - table_min
         self.results_split.paneconfigure(self._table_frame, minsize=table_min)
         self.results_split.paneconfigure(self._detail_frame, minsize=detail_min)
         position = max(

@@ -441,6 +441,27 @@ def test_font_controls_preserve_current_evidence_view_and_detail_window(app, evi
     assert json.dumps(app.session.report, sort_keys=True) == baseline
 
 
+def test_small_window_keeps_toolbar_controls_usable_at_every_font_size(app, evidence):
+    _scan(app, evidence)
+    app.geometry("1000x700")
+    app.toggle_filters()
+    for size in range(9, 17):
+        app.change_font_size(size - app.font_size_var.get())
+        app.update()
+        calendars = [widget for widget in app.filter_inputs if widget.winfo_class() == "TButton"]
+        controls = [app.font_smaller, app.font_larger, *app.export_buttons, *calendars]
+        for control in controls:
+            assert control.winfo_ismapped(), (size, control)
+            assert control.winfo_width() >= control.winfo_reqwidth(), (size, control)
+            assert control.winfo_rootx() >= app.winfo_rootx()
+            assert (
+                control.winfo_rootx() + control.winfo_width()
+                <= app.winfo_rootx() + app.winfo_width()
+            ), (size, control)
+        assert app.progress.winfo_ismapped()
+        assert app.detail_button.winfo_ismapped()
+
+
 def test_heading_sorting_is_exact_and_keeps_unknown_values_last(app, tmp_path):
     directory = tmp_path.resolve() / "sort-evidence"
     directory.mkdir()
