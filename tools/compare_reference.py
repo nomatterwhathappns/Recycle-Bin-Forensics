@@ -19,7 +19,7 @@ import stat
 import subprocess
 import sys
 from dataclasses import asdict
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from xml.etree import ElementTree
 
 from rbinforensics import __version__
@@ -32,10 +32,34 @@ PINNED_ARCHIVE_SHA256 = "00c273928431c14ab315886964690c26fc68762f40443ea69a9de33
 PINNED_EXECUTABLE_SHA256 = "d3e87d37d2adf99e4788261aff1ae8e5bf63c4abac2864c9ea4dd9e018507c44"
 MAX_METADATA_BYTES = 1_048_576
 COMPARED_FIELDS = ("format_version", "original_path", "original_size", "deleted_at_utc")
+METADATA_FIELDS = {*COMPARED_FIELDS, "deletion_filetime"}
 
 
 class ReferenceError(ValueError):
     """The supplied data or reference protocol could not be checked."""
+
+
+def _integer(value: object, *, maximum: int = (1 << 64) - 1) -> bool:
+    return type(value) is int and 0 <= value <= maximum
+
+
+def _digest(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _relative(value: object) -> PurePosixPath:
+    if not isinstance(value, str) or not value or value == ".":
+        raise ReferenceError("Corpus source must be a safe relative POSIX path")
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or "\\" in value
+        or ":" in value
+        or value != path.as_posix()
+    ):
+        raise ReferenceError("Corpus source must be a safe relative POSIX path")
+    return path
 
 
 def _safe_bytes(path: Path) -> bytes:
@@ -232,19 +256,47 @@ def corpus_inputs(directory: Path) -> tuple[list[dict], dict]:
     """Check the supplied manifest's source digests before comparing its cases."""
     manifest_bytes = _safe_bytes(directory / "manifest.json")
     manifest = json.loads(manifest_bytes)
-    if manifest.get("schema_version") != "1.0" or manifest.get("corpus_id") != "rbf-synthetic-v1":
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != "1.0"
+        or manifest.get("corpus_id") != "rbf-synthetic-v1"
+    ):
         raise ReferenceError("Unsupported synthetic corpus manifest")
-    files = {entry["path"]: entry for entry in manifest["files"]}
+    if not isinstance(manifest.get("files"), list) or not isinstance(manifest.get("cases"), list):
+        raise ReferenceError("Corpus manifest files/cases must be lists")
+    files = {}
+    for entry in manifest["files"]:
+        if (
+            not isinstance(entry, dict)
+            or not _integer(entry.get("size"))
+            or not _digest(entry.get("sha256"))
+        ):
+            raise ReferenceError("Invalid corpus file entry")
+        key = str(_relative(entry.get("path")))
+        if key in files:
+            raise ReferenceError("Duplicate corpus file entry")
+        files[key] = entry
     cases = []
+    seen = set()
     for case in manifest["cases"]:
-        path = PurePosixPath(case["source"])
-        if path.is_absolute() or ".." in path.parts or "\\" in str(path):
-            raise ReferenceError("Corpus source must be a safe relative POSIX path")
+        if (
+            not isinstance(case, dict)
+            or not isinstance(case.get("id"), str)
+            or not case["id"]
+            or case["id"] in seen
+            or case.get("record_type") not in ("metadata", "orphan_payload")
+            or not isinstance(case.get("expected"), dict)
+        ):
+            raise ReferenceError("Invalid or duplicate corpus case entry")
+        seen.add(case["id"])
+        path = _relative(case.get("source"))
         if case["record_type"] != "metadata":
             cases.append({"id": case["id"], "skip": "Orphan payload has no $I metadata to compare"})
             continue
         source = directory.joinpath(*path.parts)
         data = _safe_bytes(source)
+        if case["source"] not in files or "metadata" not in case["expected"]:
+            raise ReferenceError("Corpus metadata source/expected fields are missing")
         recorded = files[case["source"]]
         if hashlib.sha256(data).hexdigest() != recorded["sha256"] or len(data) != recorded["size"]:
             raise ReferenceError(f"Corpus input digest/size differs from manifest: {case['id']}")
@@ -255,15 +307,33 @@ def corpus_inputs(directory: Path) -> tuple[list[dict], dict]:
                     "source": source,
                     "relative_source": case["source"],
                     "malformed": True,
+                    "expected_sha256": recorded["sha256"],
                 }
             )
             continue
+        expected = case["expected"]["metadata"]
+        if (
+            not isinstance(expected, dict)
+            or not METADATA_FIELDS.issubset(expected)
+            or expected.get("format_version") not in (1, 2)
+            or type(expected.get("format_version")) is not int
+            or not isinstance(expected.get("original_path"), str)
+            or not _integer(expected.get("original_size"))
+            or not _integer(expected.get("deletion_filetime"))
+            or (
+                expected.get("deleted_at_utc") is not None
+                and not isinstance(expected["deleted_at_utc"], str)
+            )
+        ):
+            raise ReferenceError("Invalid corpus expected metadata fields")
         cases.append(
             {
                 "id": case["id"],
                 "source": source,
                 "relative_source": case["source"],
                 "expected": case["expected"]["metadata"],
+                "expected_sha256": recorded["sha256"],
+                "ground_truth_kind": "synthetic_manifest",
             }
         )
     return cases, {
@@ -273,11 +343,84 @@ def corpus_inputs(directory: Path) -> tuple[list[dict], dict]:
     }
 
 
+def windows_samples_inputs(directory: Path, *, expected_count: int = 2) -> tuple[list[dict], dict]:
+    """Bind copied Shell samples to independent, pre-recycle sample facts."""
+    if type(expected_count) is not int or expected_count < 1:
+        raise ReferenceError("Expected Windows sample count must be a positive integer")
+    ensure_no_symlinks(directory)
+    if not directory.is_dir():
+        raise ReferenceError("Windows sample root must be an existing directory")
+    entries = sorted(directory.iterdir())
+    if len(entries) != expected_count:
+        raise ReferenceError(
+            f"Expected {expected_count} Windows sample cases, found {len(entries)}"
+        )
+    inputs = []
+    for case in entries:
+        ensure_no_symlinks(case)
+        if not case.is_dir():
+            raise ReferenceError("Each Windows sample case must be a directory")
+        provenance_bytes = _safe_bytes(case / "provenance.json")
+        provenance = json.loads(provenance_bytes)
+        if not isinstance(provenance, dict):
+            raise ReferenceError("Windows sample provenance must be an object")
+        name = provenance.get("metadata_name")
+        original_path = provenance.get("original_path")
+        lower = provenance.get("deletion_lower_bound_filetime")
+        upper = provenance.get("deletion_upper_bound_filetime")
+        if (
+            provenance.get("sample_kind") != "controlled_windows_shell"
+            or not isinstance(name, str)
+            or not name.startswith("$I")
+            or len(name) <= 2
+            or any(character in name for character in "/\\:\0")
+            or not _digest(provenance.get("metadata_sha256"))
+            or not _digest(provenance.get("payload_sha256"))
+            or not isinstance(provenance.get("windows_build"), str)
+            or not provenance["windows_build"]
+            or not isinstance(original_path, str)
+            or not PureWindowsPath(original_path).is_absolute()
+            or not _integer(provenance.get("original_size"))
+            or not _integer(lower)
+            or not _integer(upper)
+            or lower > upper
+        ):
+            raise ReferenceError("Invalid controlled Windows sample provenance")
+        if {item.name for item in case.iterdir()} != {name, "provenance.json"}:
+            raise ReferenceError("Windows case contains missing or unbound sample files")
+        source = case / name
+        digest = hashlib.sha256(_safe_bytes(source)).hexdigest()
+        if digest != provenance["metadata_sha256"]:
+            raise ReferenceError("Windows sample metadata digest differs from provenance")
+        inputs.append(
+            {
+                "id": case.name,
+                "source": source,
+                "relative_source": source.relative_to(directory).as_posix(),
+                "expected": {
+                    "original_path": original_path,
+                    "original_size": provenance["original_size"],
+                },
+                "expected_sha256": digest,
+                "expected_time_window": {"lower": lower, "upper": upper},
+                "ground_truth_kind": "controlled_windows_shell",
+                "provenance": provenance,
+                "provenance_sha256": hashlib.sha256(provenance_bytes).hexdigest(),
+            }
+        )
+    return inputs, {
+        "kind": "controlled_windows_shell",
+        "expected_sample_count": expected_count,
+        "scope": "Independently known original path, size, and pre/post-recycle clock interval",
+    }
+
+
 def run_comparison(
     executable: Path,
     inputs: list[dict],
     *,
     corpus: dict | None = None,
+    windows_samples: dict | None = None,
     allow_known_differences: bool = False,
 ) -> dict:
     identity = reference_identity(executable)
@@ -291,15 +434,39 @@ def run_comparison(
         )
         result["id"] = entry["id"]
         result["source"] = entry.get("relative_source", str(entry["source"]))
+        if entry.get("expected_sha256") not in (None, result["source_sha256"]):
+            raise ReferenceError("Compared input bytes differ from their bound manifest/provenance")
+        result["ground_truth_checked"] = entry.get("expected") is not None
+        if result["ground_truth_checked"]:
+            result["ground_truth"] = {
+                "kind": entry.get("ground_truth_kind", "supplied_expected_values"),
+                "expected_fields": entry["expected"],
+                "deletion_filetime_interval": entry.get("expected_time_window"),
+            }
+        if "provenance" in entry:
+            result["provenance"] = entry["provenance"]
+            result["provenance_sha256"] = entry["provenance_sha256"]
         if result["status"] == "not_comparable":
             if entry.get("expected") is not None:
-                raise ReferenceError("Known-valid corpus metadata was rejected by the RBF parser")
+                raise ReferenceError("Known-valid expected metadata was rejected by the RBF parser")
             excluded.append(result)
         else:
             if entry.get("malformed"):
                 raise ReferenceError(
                     "A deliberately malformed corpus input was unexpectedly decoded"
                 )
+            window = entry.get("expected_time_window")
+            if window is not None:
+                tick = result["rbf"]["deletion_filetime"]
+                if not window["lower"] <= tick <= window["upper"]:
+                    result["ground_truth_differences"].append(
+                        {
+                            "field": "deletion_filetime",
+                            "expected_interval": window,
+                            "rbf": tick,
+                        }
+                    )
+                    result["status"] = "different"
             results.append(result)
     if not results:
         raise ReferenceError(
@@ -320,6 +487,7 @@ def run_comparison(
         "python": platform.python_version(),
         "reference": identity,
         "corpus": corpus,
+        "windows_samples": windows_samples,
         "scope": {
             "fields": list(COMPARED_FIELDS),
             "time_comparison": "whole UTC seconds only",
@@ -329,6 +497,11 @@ def run_comparison(
                 "malformed input acceptance or complete Windows-version compatibility",
             ],
             "allow_documented_reference_differences": allow_known_differences,
+            "ground_truth": (
+                "independent expected fields checked for every decoded record"
+                if all(result["ground_truth_checked"] for result in results)
+                else "not checked for raw --input records; agreement between parsers only"
+            ),
         },
         "summary": {
             "compared_records": len(results),
@@ -340,6 +513,9 @@ def run_comparison(
             "documented_reference_differences": known,
             "unexplained_differences": unexplained,
             "ground_truth_differences": ground_truth,
+            "ground_truth_checked_records": sum(
+                result["ground_truth_checked"] for result in results
+            ),
             "reference_warning_records": sum(
                 result["reference_exit_code"] == 5 for result in results
             ),
@@ -354,6 +530,12 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--corpus", type=Path, help="Generated synthetic corpus root")
     group.add_argument("--input", action="append", type=Path, help="One $I file; repeat as needed")
+    group.add_argument(
+        "--windows-samples", type=Path, help="Copied controlled Windows cases with provenance.json"
+    )
+    parser.add_argument(
+        "--expected-samples", type=int, help="Expected Windows case count (positive; default 2)"
+    )
     parser.add_argument("--reference", type=Path, help="Existing rifiuti-vista executable")
     parser.add_argument(
         "--output", type=Path, help="New JSON output file outside all input directories"
@@ -364,6 +546,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Permit only explicitly documented rifiuti2 0.8.2 size/zero-time differences",
     )
     args = parser.parse_args(argv)
+    if args.expected_samples is not None and (
+        args.windows_samples is None or args.expected_samples < 1
+    ):
+        parser.error("--expected-samples requires --windows-samples and a positive count")
     try:
         supplied = (
             str(args.reference) if args.reference is not None else shutil.which("rifiuti-vista")
@@ -371,18 +557,34 @@ def main(argv: list[str] | None = None) -> int:
         if supplied is None:
             raise ReferenceError("Supply --reference or install rifiuti-vista on PATH")
         executable = Path(supplied).absolute()
+        windows_samples = None
         if args.corpus is not None:
             inputs, corpus = corpus_inputs(args.corpus)
             sources = [args.corpus]
+        elif args.windows_samples is not None:
+            inputs, windows_samples = windows_samples_inputs(
+                args.windows_samples,
+                expected_count=args.expected_samples if args.expected_samples is not None else 2,
+            )
+            corpus = None
+            sources = [args.windows_samples]
         else:
             inputs = [{"id": f"input-{i + 1}", "source": path} for i, path in enumerate(args.input)]
             corpus = None
             sources = args.input
         if args.output is not None:
             for source in sources:
-                validate_output(source, args.output, source_was_file=args.corpus is None)
+                validate_output(
+                    source,
+                    args.output,
+                    source_was_file=args.corpus is None and args.windows_samples is None,
+                )
         report = run_comparison(
-            executable, inputs, corpus=corpus, allow_known_differences=args.allow_known_differences
+            executable,
+            inputs,
+            corpus=corpus,
+            windows_samples=windows_samples,
+            allow_known_differences=args.allow_known_differences,
         )
         rendered = json.dumps(report, ensure_ascii=True, indent=2) + "\n"
         if args.output is not None:

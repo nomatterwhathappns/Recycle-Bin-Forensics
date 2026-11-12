@@ -609,3 +609,15 @@ Pengaturan teks desktop mempunyai batas 9–16 point dengan ukuran awal 11. Ia m
 Perubahan font perlu diuji sambil sebuah baris dipilih dan filter aktif. Pilihan, nilai filter, dan hash yang ditampilkan harus tetap menunjuk record yang sama. Layout juga perlu diperiksa pada jendela kecil, filter terbuka/tertutup, serta pembatas yang digeser agar progress, pembatalan, dan ekspor tetap dapat digunakan.
 
 Pengujian GUI bukan hanya memastikan sebuah jendela muncul. Skenario yang relevan mencakup pembacaan path panjang/Unicode, salin nilai yang benar, perubahan pilihan pada jendela detail, sorting lintas halaman dan batas uint64, serta data tanpa timestamp. Pengujian tersebut melengkapi parser/controller tests dan validasi artefak Windows; masing-masing menjawab jenis pertanyaan yang berbeda.
+
+## 29. Menguji hasil dengan tiga sumber pengetahuan
+
+Versi 1.3 menambahkan corpus sintetis, pembandingan parser independen, benchmark, dan rilis paket yang bisa diverifikasi. Ketiganya menjawab pertanyaan yang berbeda.
+
+[`examples/corpus.py`](../examples/corpus.py) mendeklarasikan byte dan hasil yang diharapkan untuk 20 kasus. Generator tidak menjalankan parser untuk membuat jawaban acuannya. Verifier memeriksa 33 hash file, struktur direktori, manifest kanonis, lalu hasil scanner. Enam kasus sengaja rusak: scan normal boleh keluar dengan status gagal, sementara verifier berhasil karena kegagalan itu memang jawaban yang diharapkan. Lihat [panduan dataset](DATASET.md).
+
+[`tools/compare_reference.py`](../tools/compare_reference.py) menjalankan rifiuti2 yang identitas dan hash-nya dicatat, lalu membandingkan field yang sama. Referensi ini mengeluarkan waktu pada presisi satu detik; kesepakatan di sini tidak membuktikan kecocokan 100 ns. Selisih ukuran uint64 maksimum dan FILETIME nol tetap dilaporkan sebagai perbedaan terdokumentasi. Kasus Windows Shell memakai path, ukuran, hash, dan rentang waktu yang diketahui dari pembuatan sampelnya. Lihat [hasil dan batas validasi](VALIDATION_REFERENCE.md).
+
+[`tools/benchmark.py`](../tools/benchmark.py) mengukur scan, pengaruh hashing, puncak memori proses, dan operasi GUI pada workload yang didefinisikan. Waktu membuat dataset dipisahkan. Cache tidak dikosongkan, sehingga angka ini bukan jaminan performa cold disk. Timer GUI mencatat jeda callback yang benar-benar diamati; jeda panjang perlu dibaca bersama beban, hardware, dan operasi yang sedang berjalan. Lihat [metode benchmark](BENCHMARKS.md).
+
+[`tools/prepare_release.py`](../tools/prepare_release.py) mengikat paket Windows pada versi dan commit, memeriksa hasil smoke test, membuat ZIP dataset, lalu menghitung checksum setiap aset. Workflow rilis menunggu pengujian, mengunggah draft, mengunduh kembali aset, memverifikasi checksum, kemudian memublikasikannya. Hash membuktikan kesamaan byte terhadap checksum yang dipilih; hash tidak menggantikan tanda tangan penerbit. Lihat [alur rilis](RELEASES.md).

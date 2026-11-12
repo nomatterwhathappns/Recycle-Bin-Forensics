@@ -113,18 +113,9 @@ jobs:
             --output work/reference-results/synthetic-reference.json
       - name: Compare independently generated Windows Shell samples
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          from tools.compare_reference import main
-          samples = sorted(Path("work/windows-reference-samples").rglob("$I*"))
-          if len(samples) != 2:
-              raise SystemExit("Expected both controlled Windows samples")
-          args = ["--reference", "work/reference/usr/bin/rifiuti-vista",
-                  "--output", "work/reference-results/windows-reference.json"]
-          for sample in samples:
-              args.extend(["--input", str(sample)])
-          raise SystemExit(main(args))
-          PY
+          python tools/compare_reference.py --windows-samples work/windows-reference-samples \
+            --reference work/reference/usr/bin/rifiuti-vista \
+            --output work/reference-results/windows-reference.json
       - name: Preserve reference results including documented differences
         if: always()
         uses: actions/upload-artifact@v4

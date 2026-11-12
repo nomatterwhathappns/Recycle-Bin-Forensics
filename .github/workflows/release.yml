@@ -64,7 +64,8 @@ jobs:
             --commit "$SOURCE_COMMIT" --tag "$RELEASE_TAG" \
             --report work/reference-results/synthetic-reference.json \
             --report work/reference-results/windows-reference.json \
-            --report "docs/results/benchmark-${RELEASE_TAG#v}.json"
+            --report "docs/results/benchmark-${RELEASE_TAG#v}.json" \
+            --report "docs/results/benchmark-large-payload-${RELEASE_TAG#v}.json"
       - name: Create draft and upload complete assets
         env:
           GH_TOKEN: ${{ github.token }}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import struct
 import subprocess
@@ -125,6 +126,8 @@ def test_real_input_agreement_keeps_raw_ticks_and_source_hash(sample, monkeypatc
     assert report["results"][0]["rbf"]["deletion_filetime"] == TICKS
     assert len(report["results"][0]["source_sha256"]) == 64
     assert "whole UTC seconds" in report["scope"]["time_comparison"]
+    assert report["summary"]["ground_truth_checked_records"] == 0
+    assert "not checked" in report["scope"]["ground_truth"]
 
 
 def test_unexplained_difference_never_passes_allow_known_flag(sample, monkeypatch):
@@ -293,3 +296,201 @@ def test_nonregular_and_oversized_inputs_are_rejected(sample, tmp_path):
         stream.truncate(reference.MAX_METADATA_BYTES + 1)
     with pytest.raises(reference.ReferenceError, match="exceeds"):
         reference.compare_file(huge, executable, "0.8.2")
+
+
+@pytest.fixture
+def windows_samples(tmp_path):
+    root = tmp_path / "windows-samples"
+    root.mkdir()
+    for name in ("ascii-sample", "unicode-資料-📄"):
+        case = root / name
+        case.mkdir()
+        field = (ORIGINAL + "\0").encode("utf-16-le")
+        data = struct.pack("<QQQI", 2, 7, TICKS, len(field) // 2) + field
+        (case / SOURCE_NAME).write_bytes(data)
+        facts = {
+            "sample_kind": "controlled_windows_shell",
+            "windows_build": "10.0.26100",
+            "original_path": ORIGINAL,
+            "original_size": 7,
+            "payload_sha256": hashlib.sha256(b"payload").hexdigest(),
+            "metadata_name": SOURCE_NAME,
+            "metadata_sha256": hashlib.sha256(data).hexdigest(),
+            "deletion_lower_bound_filetime": TICKS - 20_000_000,
+            "deletion_upper_bound_filetime": TICKS + 20_000_000,
+        }
+        (case / "provenance.json").write_text(json.dumps(facts), encoding="utf-8")
+    return root
+
+
+def test_windows_sample_comparison_binds_independent_facts_and_provenance(
+    sample, windows_samples, monkeypatch
+):
+    _, executable = sample
+    fake_reference(monkeypatch)
+    inputs, scope = reference.windows_samples_inputs(windows_samples)
+    report = reference.run_comparison(executable, inputs, windows_samples=scope)
+    assert report["status"] == "passed"
+    assert report["summary"]["ground_truth_checked_records"] == 2
+    assert report["windows_samples"]["expected_sample_count"] == 2
+    for result in report["results"]:
+        assert result["provenance"]["windows_build"] == "10.0.26100"
+        assert result["source_sha256"] == result["provenance"]["metadata_sha256"]
+        expected_bytes = (windows_samples / result["id"] / "provenance.json").read_bytes()
+        assert result["provenance_sha256"] == hashlib.sha256(expected_bytes).hexdigest()
+        assert result["ground_truth"]["expected_fields"] == {
+            "original_path": ORIGINAL,
+            "original_size": 7,
+        }
+        assert "deleted_at_utc" not in result["ground_truth"]["expected_fields"]
+        assert result["ground_truth"]["deletion_filetime_interval"]["lower"] < TICKS
+
+
+@pytest.mark.parametrize("field,value", [("original_size", 8), ("original_path", r"C:\other.txt")])
+def test_agreeing_parsers_cannot_pass_wrong_known_windows_facts(
+    field, value, sample, windows_samples, monkeypatch
+):
+    _, executable = sample
+    fake_reference(monkeypatch)
+    provenance = windows_samples / "ascii-sample" / "provenance.json"
+    facts = json.loads(provenance.read_text())
+    facts[field] = value
+    provenance.write_text(json.dumps(facts))
+    inputs, scope = reference.windows_samples_inputs(windows_samples)
+    report = reference.run_comparison(executable, inputs, windows_samples=scope)
+    assert report["status"] == "different"
+    assert report["summary"]["ground_truth_differences"] == 1
+
+
+def test_windows_independent_time_interval_is_enforced(sample, windows_samples, monkeypatch):
+    _, executable = sample
+    fake_reference(monkeypatch)
+    provenance = windows_samples / "ascii-sample" / "provenance.json"
+    facts = json.loads(provenance.read_text())
+    facts["deletion_lower_bound_filetime"] = TICKS + 1
+    facts["deletion_upper_bound_filetime"] = TICKS + 2
+    provenance.write_text(json.dumps(facts))
+    inputs, scope = reference.windows_samples_inputs(windows_samples)
+    report = reference.run_comparison(executable, inputs, windows_samples=scope)
+    assert report["status"] == "different"
+    mismatch = report["results"][0]["ground_truth_differences"][0]
+    assert mismatch["field"] == "deletion_filetime"
+    assert mismatch["expected_interval"] == {"lower": TICKS + 1, "upper": TICKS + 2}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sample_kind", "arbitrary_input"),
+        ("metadata_name", "../$IESCAPE"),
+        ("metadata_name", "$I\\escape"),
+        ("metadata_name", "ordinary.txt"),
+        ("metadata_sha256", "invalid"),
+        ("original_path", "relative.txt"),
+        ("original_size", True),
+        ("deletion_lower_bound_filetime", False),
+        ("deletion_upper_bound_filetime", str(TICKS)),
+        ("windows_build", None),
+    ],
+)
+def test_windows_provenance_invalid_types_and_paths_fail(windows_samples, field, value):
+    provenance = windows_samples / "ascii-sample" / "provenance.json"
+    facts = json.loads(provenance.read_text())
+    facts[field] = value
+    provenance.write_text(json.dumps(facts))
+    with pytest.raises(reference.ReferenceError, match="Invalid controlled"):
+        reference.windows_samples_inputs(windows_samples)
+
+
+def test_windows_provenance_hash_tampering_and_unbound_files_fail(windows_samples):
+    source = windows_samples / "ascii-sample" / SOURCE_NAME
+    original = source.read_bytes()
+    source.write_bytes(original + b"changed")
+    with pytest.raises(reference.ReferenceError, match="digest differs"):
+        reference.windows_samples_inputs(windows_samples)
+    source.write_bytes(original)
+    extra = source.with_name("$IUNBOUND.txt")
+    extra.write_bytes(original)
+    with pytest.raises(reference.ReferenceError, match="unbound"):
+        reference.windows_samples_inputs(windows_samples)
+
+
+@pytest.mark.parametrize("expected_count", [0, -1, True, 3])
+def test_windows_sample_count_is_positive_and_exact(windows_samples, expected_count):
+    with pytest.raises(reference.ReferenceError):
+        reference.windows_samples_inputs(windows_samples, expected_count=expected_count)
+
+
+def test_windows_source_cannot_change_after_binding(sample, windows_samples, monkeypatch):
+    _, executable = sample
+    fake_reference(monkeypatch)
+    inputs, scope = reference.windows_samples_inputs(windows_samples)
+    # Both parsers permit trailing bytes with warnings, and still agree on all
+    # original fields. The hash binding must independently reject these bytes.
+    source = inputs[0]["source"]
+    source.write_bytes(source.read_bytes() + b"changed")
+    with pytest.raises(reference.ReferenceError, match="bound manifest/provenance"):
+        reference.run_comparison(executable, inputs, windows_samples=scope)
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        [],
+        None,
+        "wrong",
+        {"schema_version": "1.0", "corpus_id": "rbf-synthetic-v1", "files": [None], "cases": []},
+    ],
+)
+def test_malformed_manifest_returns_cli_error_without_traceback(tmp_path, sample, manifest, capsys):
+    _, executable = sample
+    corpus = tmp_path / "corpus-malformed"
+    corpus.mkdir()
+    (corpus / "manifest.json").write_text(json.dumps(manifest))
+    assert reference.main(["--corpus", str(corpus), "--reference", str(executable)]) == 2
+    assert "could not complete" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "container,entry",
+    [
+        ("files", []),
+        ("cases", []),
+        ("cases", None),
+        ("cases", {"id": "bad", "record_type": "metadata", "source": "file", "expected": []}),
+    ],
+)
+def test_corpus_entry_container_types_are_validated(tmp_path, container, entry):
+    corpus = tmp_path / "corpus-invalid-entry"
+    generate_corpus(corpus)
+    path = corpus / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest[container][0] = entry
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(reference.ReferenceError):
+        reference.corpus_inputs(corpus)
+
+
+def test_windows_cli_uses_bound_mode_and_records_ground_truth_count(
+    sample, windows_samples, monkeypatch
+):
+    _, executable = sample
+    fake_reference(monkeypatch)
+    output = windows_samples.parent / "windows-bound-result.json"
+    assert (
+        reference.main(
+            [
+                "--windows-samples",
+                str(windows_samples),
+                "--expected-samples",
+                "2",
+                "--reference",
+                str(executable),
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(output.read_text())
+    assert report["summary"]["ground_truth_checked_records"] == 2
