@@ -2,8 +2,10 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -56,6 +58,7 @@ jobs:
       - name: Validate real Shell-generated Recycle Bin artifacts
         env:
           RBF_RUN_WINDOWS_LIVE: "1"
+          RBF_WINDOWS_SAMPLE_DIR: work/windows-reference-samples
         run: python -m pytest tests/test_windows_live.py -v -o junit_family=xunit1 --junitxml=windows-live.xml
       - name: Preserve controlled validation results
         if: always()
@@ -64,6 +67,72 @@ jobs:
           name: controlled-windows-validation
           path: windows-live.xml
           retention-days: 14
+      - name: Preserve only verified controlled Shell samples
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-reference-samples
+          path: work/windows-reference-samples
+          if-no-files-found: error
+          retention-days: 14
+  reference:
+    name: Independent parser and corpus validation
+    needs: windows-live
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install ".[dev]"
+      - name: Download controlled Shell samples
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-reference-samples
+          path: work/windows-reference-samples
+      - name: Install pinned independent parser
+        run: |
+          mkdir -p work/reference-results
+          curl --fail --location --retry 3 --output work/rifiuti2.deb \
+            https://deb.debian.org/debian/pool/main/r/rifiuti2/rifiuti2_0.8.2-1_amd64.deb
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected = "00c273928431c14ab315886964690c26fc68762f40443ea69a9de334037ae83f"
+          if hashlib.sha256(Path("work/rifiuti2.deb").read_bytes()).hexdigest() != expected:
+              raise SystemExit("Reference package checksum mismatch")
+          PY
+          dpkg-deb -x work/rifiuti2.deb work/reference
+      - name: Verify synthetic corpus and compare reference fields
+        run: |
+          python examples/generate_corpus.py work/reference-corpus
+          python examples/verify_corpus.py work/reference-corpus
+          python tools/compare_reference.py --corpus work/reference-corpus \
+            --reference work/reference/usr/bin/rifiuti-vista --allow-known-differences \
+            --output work/reference-results/synthetic-reference.json
+      - name: Compare independently generated Windows Shell samples
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tools.compare_reference import main
+          samples = sorted(Path("work/windows-reference-samples").rglob("$I*"))
+          if len(samples) != 2:
+              raise SystemExit("Expected both controlled Windows samples")
+          args = ["--reference", "work/reference/usr/bin/rifiuti-vista",
+                  "--output", "work/reference-results/windows-reference.json"]
+          for sample in samples:
+              args.extend(["--input", str(sample)])
+          raise SystemExit(main(args))
+          PY
+      - name: Preserve reference results including documented differences
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-validation-results
+          path: work/reference-results/*.json
+          if-no-files-found: error
+          retention-days: 30
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

@@ -1,22 +1,24 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.2.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.3.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
-1. Open this repository on GitHub and select **Actions**.
-2. Open a successful run of the [Windows package workflow](../.github/workflows/windows-package.yml).
-3. Download the `RecycleBinForensics-windows-x64` artifact from that run. GitHub may wrap its files in an artifact ZIP; extract that wrapper first.
-4. Locate the versioned portable ZIP and `SHA256SUMS.txt`. For 1.2.0, the package name is `RecycleBinForensics-1.2.0-windows-x64.zip`.
+1. Open this repository's [GitHub Releases](https://github.com/nomatterwhathappns/Recycle-Bin-Forensics/releases).
+2. Select the intended version and download its Windows x64 ZIP plus `SHA256SUMS.txt`.
+3. Compare the ZIP's SHA-256 with its entry in `SHA256SUMS.txt` before extraction.
+4. Locate the versioned portable ZIP and `SHA256SUMS.txt`. For 1.3.0, the package name is `RecycleBinForensics-1.3.0-windows-x64.zip`.
 5. Extract the portable ZIP to a chosen application folder. Keep all extracted files and subdirectories together.
 6. Open `RecycleBinForensics.exe` inside the extracted application folder.
 
 The portable build contains Python, Tcl/Tk, and the timezone database it needs; a separate Python installation is not required. Copying only the executable loses its support files. Download artifacts from the intended repository and matching workflow run. `BUILD-INFO.json` inside the application folder records the build version, commit where available, platform/tool versions, and packaged smoke-test result.
 
+Development packages are also available from successful runs of the [Windows package workflow](../.github/workflows/windows-package.yml). Those temporary Actions artifacts can contain an outer ZIP wrapper; extract the wrapper before following the portable ZIP instructions.
+
 Compare the ZIP's SHA-256 with the supplied checksum file when transferring or archiving a build:
 
 ```powershell
-Get-FileHash .\RecycleBinForensics-1.2.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\RecycleBinForensics-1.3.0-windows-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
@@ -48,7 +50,7 @@ rbf --version
 rbf-gui
 ```
 
-The expected version is `rbf 1.2.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
+The expected version is `rbf 1.3.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 

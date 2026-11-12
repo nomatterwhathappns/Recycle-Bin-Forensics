@@ -1,6 +1,8 @@
 include LICENSE README.md CONTRIBUTING.md SECURITY.md
 recursive-include docs *.md *.png
+recursive-include docs/results *.json
 recursive-include examples *.py
 recursive-include schemas *.json
 recursive-include tests *.py
+recursive-include tests/fixtures/synthetic-v1 *
 recursive-include tools *.py *.coveragerc

@@ -1,4 +1,4 @@
-# Recycle Bin Forensics 1.2
+# Recycle Bin Forensics 1.3
 
 An offline desktop application and Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
@@ -20,6 +20,7 @@ An offline desktop application and Python command-line toolkit for examining mod
 - Produces an offline HTML report with browser search/sorting, plus JSON, CSV, and terminal output.
 - Keeps full scan records in JSON even when a filter selects a smaller view.
 - Avoids evidence symlinks/reparse points and refuses to overwrite report files.
+- Includes a reproducible synthetic corpus, independent-parser validation, and scan/GUI benchmark tools.
 
 The parser treats decoded Windows paths as evidence text. It never opens those paths on the examiner's computer. Payload correlation uses acquired sibling names. Recursive scans do not enter `$R` payload directories: their contents are data, not another Recycle Bin inventory.
 
@@ -35,9 +36,9 @@ The preview uses synthetic data. See also the [compact 1366×768 workspace](docs
 
 ### Windows portable package
 
-Open the repository's **Actions** page and choose a successful run of the [Windows package workflow](.github/workflows/windows-package.yml). Download its package artifact, extract the portable ZIP, and launch `RecycleBinForensics.exe` from the extracted application folder. Keep the complete folder together; the executable uses its bundled support files. Python does not need to be installed separately for this package.
+Download a versioned Windows ZIP from [GitHub Releases](https://github.com/nomatterwhathappns/Recycle-Bin-Forensics/releases), compare its SHA-256 with `SHA256SUMS.txt`, extract the portable ZIP, and launch `RecycleBinForensics.exe` from the extracted application folder. Keep the complete folder together; the executable uses its bundled support files. Python does not need to be installed separately for this package.
 
-The artifact includes a versioned Windows x64 ZIP and `SHA256SUMS.txt`. These are workflow artifacts; the project does not require a GitHub Releases publication to build them. The [desktop guide](docs/DESKTOP.md#windows-portable-package) explains extraction and checksum comparison.
+Each release also includes the Python wheel/source distribution and a synthetic demo dataset. The [desktop guide](docs/DESKTOP.md#windows-portable-package) explains extraction and checksum comparison. Development builds remain available as temporary artifacts from the [Windows package workflow](.github/workflows/windows-package.yml).
 
 ### Run from Python
 
@@ -183,6 +184,11 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 
 ## Documentation and versioning
 
+- [Synthetic dataset and expected findings](docs/DATASET.md)
+- [Independent reference comparison and its limits](docs/VALIDATION_REFERENCE.md)
+- [Benchmark method and measured results](docs/BENCHMARKS.md)
+- [Release contents and verification](docs/RELEASES.md)
+
 - [Desktop user guide](docs/DESKTOP.md)
 - [Indonesian learning guide and critical code walkthrough](docs/LEARNING_ID.md)
 - [Binary layouts and parsing decisions](docs/FORMAT.md)
@@ -192,7 +198,7 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-**Application version `1.2.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+**Application version `1.3.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
 
 Feature additions increment the minor version (`1.0.0` to `1.1.0`); compatible bug fixes increment the patch version (`1.1.0` to `1.1.1`). A compatibility-breaking application change increments the major version. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
@@ -206,7 +212,7 @@ rbf --version
 rbf-gui
 ```
 
-The version command should report `rbf 1.2.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
+The version command should report `rbf 1.3.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
 
 ## Development and validation
 

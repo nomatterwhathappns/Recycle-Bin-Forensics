@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+
+- A deterministic synthetic validation corpus with an independent expected manifest, file hashes, and a verifier.
+- Reproducible comparison with pinned rifiuti2, including explicit precision limits and documented reference differences.
+- Comparison of controlled Windows Shell samples with the independent reference parser in CI.
+- Scan/hash and optional native-GUI performance benchmarks with measured timing and process memory reports.
+- Versioned GitHub Releases containing verified Windows/Python packages, a demo dataset, validation reports, and checksums.
+
+### Changed
+
+- Application/package version is `1.3.0`; completed forensic reports remain schema `2.0`.
+- Official release publication requires the test matrix, reference validation, and native Windows package validation to succeed.
+
 ## 1.2.0
 
 ### Added

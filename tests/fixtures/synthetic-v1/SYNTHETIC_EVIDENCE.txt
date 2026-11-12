@@ -1,0 +1,3 @@
+SYNTHETIC VALIDATION CORPUS ONLY. No real user data.
+Hand-specified test bytes; not acquired from a Windows device.
+The corpus contains deliberate errors. Read manifest.json and docs/DATASET.md.

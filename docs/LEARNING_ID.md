@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.2.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.2.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.3.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.3.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 

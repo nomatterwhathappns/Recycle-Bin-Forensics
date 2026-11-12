@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import json
 import os
 import platform
 import re
@@ -190,6 +191,35 @@ def test_native_recycle_metadata_matches_controlled_ground_truth(
         assert record["payload"]["sha256"] == expected_digest
         assert record["payload"]["size_matches_metadata"] is True
         assert record["source_sha256"] == hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+        # An explicit output setting preserves only this verified, generated
+        # sample for an independent parser job. Never collect unrelated bins.
+        capture = os.environ.get("RBF_WINDOWS_SAMPLE_DIR")
+        if capture:
+            capture_root = Path(capture).absolute()
+            ensure_no_symlinks(capture_root)
+            capture_root.mkdir(parents=True, exist_ok=True)
+            ensure_no_symlinks(capture_root)
+            destination = capture_root / sample_name
+            destination.mkdir()
+            ensure_no_symlinks(metadata_path)
+            sample = metadata_path.read_bytes()
+            assert hashlib.sha256(sample).hexdigest() == record["source_sha256"]
+            with (destination / metadata_path.name).open("xb") as stream:
+                stream.write(sample)
+            provenance = {
+                "sample_kind": "controlled_windows_shell",
+                "windows_build": platform.version(),
+                "original_path": str(source),
+                "original_size": len(content),
+                "payload_sha256": expected_digest,
+                "metadata_name": metadata_path.name,
+                "metadata_sha256": hashlib.sha256(sample).hexdigest(),
+                "deletion_lower_bound_filetime": lower_bound - tolerance,
+                "deletion_upper_bound_filetime": upper_bound + tolerance,
+                "note": "Freshly generated test data; not case evidence. Payload verified before cleanup.",
+            }
+            with (destination / "provenance.json").open("x", encoding="utf-8") as stream:
+                json.dump(provenance, stream, indent=2, ensure_ascii=False)
     finally:
         if owned_pair_verified:
             _cleanup_verified_pair(metadata_path, source, expected_digest)

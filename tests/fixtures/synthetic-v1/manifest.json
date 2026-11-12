@@ -1,0 +1,710 @@
+{
+  "schema_version": "1.0",
+  "corpus_id": "rbf-synthetic-v1",
+  "synthetic": true,
+  "evidence_root": "evidence",
+  "scan_options": {
+    "recursive": true,
+    "hash_payload": true,
+    "timezone": "UTC"
+  },
+  "expected_summary": {
+    "candidates": 18,
+    "parsed": 12,
+    "errors": 6,
+    "warnings": 5,
+    "skipped": 0,
+    "payloads_hashed": 10,
+    "orphan_payloads": 2
+  },
+  "files": [
+    {
+      "path": "SYNTHETIC_EVIDENCE.txt",
+      "size": 195,
+      "sha256": "10fd1824905137a07299f71229af79846842f927e2029c09435a9587b8f74392"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD013.bin",
+      "size": 3,
+      "sha256": "070b13c004e9475fa155cd84d90de9f87db1b7dea6707329638a6ce66043d246"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD014.bin",
+      "size": 24,
+      "sha256": "77f5999df8f198d6e44996e8311f7cad948f1275bb40f074a25cf492a21e354d"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD015.bin",
+      "size": 30,
+      "sha256": "e5876427b1addb63603bbf1056a82b5970942e3b2c2ebdb3bb9ef0c5bd869660"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD016.bin",
+      "size": 24,
+      "sha256": "ade265c55187925f2023feb1c3b483f1b4ceb1911820d58430652993f94eac26"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD017.bin",
+      "size": 32,
+      "sha256": "bc0345594a4a7380483c51b663453f8740ba0aa0c2e03b6d283e31e427d82ded"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD018.bin",
+      "size": 28,
+      "sha256": "72fe58c375161afb81cd9ebb83375bf0d2609eb44bf4e02a1a671ed83cb27094"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IDIR009",
+      "size": 58,
+      "sha256": "5c42d5e511b285682300a0a4f0baf925df1d3aa3ff810b516875b708b9929d71"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILARGE04.bin",
+      "size": 64,
+      "sha256": "e1178762978c5ccde86699dfd426e4c3d25d59bc280d6229c724c45402ec99b0"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILONG12.txt",
+      "size": 762,
+      "sha256": "02e13904918f64ac5b66e99903b2da0f78498d742786450ed76cb32993bb4902"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMAX005.bin",
+      "size": 544,
+      "sha256": "c816985180c2bf9292f15dd496fb540494a46c849bd74b33d0bc2001372451e6"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMISS07.pdf",
+      "size": 68,
+      "sha256": "ecc92fe4f6eba2a366a71cf9e64302ae620d1758eb5989db32174406f4127783"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ISIZE08.txt",
+      "size": 70,
+      "sha256": "133818e073333ae705fa53aac24c89835963eb48ae12a21d4d9880ffd65524b6"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITAIL11.txt",
+      "size": 74,
+      "sha256": "f607f63bffbdc8c709ff5f22ead32cc584dc6e7893edb15479257b2d1c1aebd2"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITICK06.txt",
+      "size": 62,
+      "sha256": "9a7d724297c743576cec26c5fd0ced400ddbf7a2c0a17aeae22617632bb099c4"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITIME10.txt",
+      "size": 78,
+      "sha256": "09a77110fc5ea5536f859e60925aa28878df7bd1770cd6c1b6b3223b9ff86d3c"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV10001.txt",
+      "size": 544,
+      "sha256": "79b310b674947393b7041aea04732494d823d5bbac400a70d53b454f6722f8da"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV20002.txt",
+      "size": 64,
+      "sha256": "e3c2c3c6127fdeac882348fbfedfff00b5f9f0a15e9cb0db7c953a297e4a58c4"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IZERO03.bin",
+      "size": 64,
+      "sha256": "d5fb764f0abe328ec1628ac66f4ca19f23842c4dbf17b40ba3fed05ebfb0f764"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RBAD013.bin",
+      "size": 7,
+      "sha256": "447b4a3be1a220cac88744d636e79fdd2933ebe45501bd1c20a8034b22f14819"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RDIR009/$IINSIDE.txt",
+      "size": 66,
+      "sha256": "7dd7eb494dc5c802df8c5b90137762604238932b5795a5566d748ba2f0dcb6d7"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RDIR009/readme.txt",
+      "size": 27,
+      "sha256": "aca62729fccc8db8080685542e28d3205a9f01307c1deabc36e161e448f92560"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RLONG12.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH19.bin",
+      "size": 17,
+      "sha256": "4a5722af795d71cdd2c417ce8ce47c9d65c1a80590ee6f37a689c32bcddbeeea"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH20/$IINSIDE.txt",
+      "size": 66,
+      "sha256": "7dd7eb494dc5c802df8c5b90137762604238932b5795a5566d748ba2f0dcb6d7"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH20/readme.txt",
+      "size": 27,
+      "sha256": "aca62729fccc8db8080685542e28d3205a9f01307c1deabc36e161e448f92560"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RSIZE08.txt",
+      "size": 6,
+      "sha256": "c962fa1be311981f0f965857e89b000707f9cea07a069d073461308f3019200f"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTAIL11.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTICK06.txt",
+      "size": 5,
+      "sha256": "1b482239066a8e2baf24a03a0570a39e837d09c77ac19dfeb88578605bcbdf5f"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTIME10.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RV10001.txt",
+      "size": 6,
+      "sha256": "444e0fffbd825e9610ff5b199485707a0c895339ae80c15cc8a8aee41b106fda"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RV20002.txt",
+      "size": 8,
+      "sha256": "ebc45fabefbabdd06424b3c476b11e93fec784069ff10844e7383d59f491f8cb"
+    },
+    {
+      "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RZERO03.bin",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "directories": [
+    "evidence",
+    "evidence/$Recycle.Bin",
+    "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001",
+    "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RDIR009",
+    "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH20"
+  ],
+  "cases": [
+    {
+      "id": "v1-ascii",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV10001.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 1,
+          "original_path": "C:\\Demo\\notes.txt",
+          "original_size": 6,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RV10001.txt",
+          "status": "available_file",
+          "size": 6,
+          "sha256": "444e0fffbd825e9610ff5b199485707a0c895339ae80c15cc8a8aee41b106fda",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 544,
+        "source_sha256": "79b310b674947393b7041aea04732494d823d5bbac400a70d53b454f6722f8da",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "v2-unicode",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV20002.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\資料-📄.txt",
+          "original_size": 8,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RV20002.txt",
+          "status": "available_file",
+          "size": 8,
+          "sha256": "ebc45fabefbabdd06424b3c476b11e93fec784069ff10844e7383d59f491f8cb",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 64,
+        "source_sha256": "e3c2c3c6127fdeac882348fbfedfff00b5f9f0a15e9cb0db7c953a297e4a58c4",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "zero-size",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IZERO03.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\empty.bin",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RZERO03.bin",
+          "status": "available_file",
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 64,
+        "source_sha256": "d5fb764f0abe328ec1628ac66f4ca19f23842c4dbf17b40ba3fed05ebfb0f764",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "large-uint64",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILARGE04.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\large.bin",
+          "original_size": 9007199254740995,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 64,
+        "source_sha256": "e1178762978c5ccde86699dfd426e4c3d25d59bc280d6229c724c45402ec99b0",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "max-uint64",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMAX005.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 1,
+          "original_path": "C:\\Demo\\max.bin",
+          "original_size": 18446744073709551615,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 544,
+        "source_sha256": "c816985180c2bf9292f15dd496fb540494a46c849bd74b33d0bc2001372451e6",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "adjacent-tick",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITICK06.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\tick.txt",
+          "original_size": 5,
+          "deletion_filetime": 133485408001234568,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234568Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTICK06.txt",
+          "status": "available_file",
+          "size": 5,
+          "sha256": "1b482239066a8e2baf24a03a0570a39e837d09c77ac19dfeb88578605bcbdf5f",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 62,
+        "source_sha256": "9a7d724297c743576cec26c5fd0ced400ddbf7a2c0a17aeae22617632bb099c4",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "missing-payload",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMISS07.pdf",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\missing.pdf",
+          "original_size": 1024,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 68,
+        "source_sha256": "ecc92fe4f6eba2a366a71cf9e64302ae620d1758eb5989db32174406f4127783",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "size-mismatch",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ISIZE08.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\mismatch.txt",
+          "original_size": 100,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "warning",
+        "issue_codes": [
+          "payload_size_mismatch"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RSIZE08.txt",
+          "status": "available_file",
+          "size": 6,
+          "sha256": "c962fa1be311981f0f965857e89b000707f9cea07a069d073461308f3019200f",
+          "hash_status": "computed",
+          "size_matches_metadata": false
+        },
+        "source_size": 70,
+        "source_sha256": "133818e073333ae705fa53aac24c89835963eb48ae12a21d4d9880ffd65524b6",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "paired-folder",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IDIR009",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\folder",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RDIR009",
+          "status": "available_directory",
+          "size": null,
+          "sha256": null,
+          "hash_status": "not_applicable",
+          "size_matches_metadata": null
+        },
+        "source_size": 58,
+        "source_sha256": "5c42d5e511b285682300a0a4f0baf925df1d3aa3ff810b516875b708b9929d71",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "unknown-time",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITIME10.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\unknown-time.txt",
+          "original_size": 0,
+          "deletion_filetime": 0,
+          "deleted_at_utc": null
+        },
+        "status": "warning",
+        "issue_codes": [
+          "zero_deletion_time"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTIME10.txt",
+          "status": "available_file",
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 78,
+        "source_sha256": "09a77110fc5ea5536f859e60925aa28878df7bd1770cd6c1b6b3223b9ff86d3c",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "trailing-bytes",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITAIL11.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\trailing.txt",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "warning",
+        "issue_codes": [
+          "trailing_data"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RTAIL11.txt",
+          "status": "available_file",
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 74,
+        "source_sha256": "f607f63bffbdc8c709ff5f22ead32cc584dc6e7893edb15479257b2d1c1aebd2",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "long-path",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILONG12.txt",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\long.txt",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "status": "ok",
+        "issue_codes": [],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RLONG12.txt",
+          "status": "available_file",
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash_status": "computed",
+          "size_matches_metadata": true
+        },
+        "source_size": 762,
+        "source_sha256": "02e13904918f64ac5b66e99903b2da0f78498d742786450ed76cb32993bb4902",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "truncated-header",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD013.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "truncated_header"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RBAD013.bin",
+          "status": "available_file",
+          "size": 7,
+          "sha256": "447b4a3be1a220cac88744d636e79fdd2933ebe45501bd1c20a8034b22f14819",
+          "hash_status": "computed",
+          "size_matches_metadata": null
+        },
+        "source_size": 3,
+        "source_sha256": "070b13c004e9475fa155cd84d90de9f87db1b7dea6707329638a6ce66043d246",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "truncated-v1-path",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD014.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "truncated_path"
+        ],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 24,
+        "source_sha256": "77f5999df8f198d6e44996e8311f7cad948f1275bb40f074a25cf492a21e354d",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "truncated-v2-path",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD015.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "truncated_path"
+        ],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 30,
+        "source_sha256": "e5876427b1addb63603bbf1056a82b5970942e3b2c2ebdb3bb9ef0c5bd869660",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "unsupported-version",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD016.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "unsupported_version"
+        ],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 24,
+        "source_sha256": "ade265c55187925f2023feb1c3b483f1b4ceb1911820d58430652993f94eac26",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "invalid-utf16",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD017.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "invalid_utf16"
+        ],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 32,
+        "source_sha256": "bc0345594a4a7380483c51b663453f8740ba0aa0c2e03b6d283e31e427d82ded",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "invalid-path-length",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD018.bin",
+      "record_type": "metadata",
+      "expected": {
+        "metadata": null,
+        "status": "error",
+        "issue_codes": [
+          "invalid_path_length"
+        ],
+        "payload": {
+          "path": null,
+          "status": "missing",
+          "size": null,
+          "sha256": null,
+          "hash_status": "unavailable",
+          "size_matches_metadata": null
+        },
+        "source_size": 28,
+        "source_sha256": "72fe58c375161afb81cd9ebb83375bf0d2609eb44bf4e02a1a671ed83cb27094",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "orphan-file",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH19.bin",
+      "record_type": "orphan_payload",
+      "expected": {
+        "metadata": null,
+        "status": "warning",
+        "issue_codes": [
+          "orphan_payload"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH19.bin",
+          "status": "available_file",
+          "size": 17,
+          "sha256": "4a5722af795d71cdd2c417ce8ce47c9d65c1a80590ee6f37a689c32bcddbeeea",
+          "hash_status": "computed",
+          "size_matches_metadata": null
+        },
+        "source_size": 17,
+        "source_sha256": "4a5722af795d71cdd2c417ce8ce47c9d65c1a80590ee6f37a689c32bcddbeeea",
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    },
+    {
+      "id": "orphan-folder",
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH20",
+      "record_type": "orphan_payload",
+      "expected": {
+        "metadata": null,
+        "status": "warning",
+        "issue_codes": [
+          "orphan_payload"
+        ],
+        "payload": {
+          "path": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$RORPH20",
+          "status": "available_directory",
+          "size": null,
+          "sha256": null,
+          "hash_status": "not_applicable",
+          "size_matches_metadata": null
+        },
+        "source_size": null,
+        "source_sha256": null,
+        "sid": "S-1-5-21-111111111-222222222-333333333-1001"
+      }
+    }
+  ]
+}
