@@ -1,0 +1,699 @@
+{
+  "schema_version": "1.0",
+  "report_kind": "reference_validation",
+  "status": "passed",
+  "application_version": "1.3.0",
+  "commit": null,
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "reference": {
+    "name": "rifiuti2/rifiuti-vista",
+    "version": "0.8.2",
+    "executable_sha256": "d3e87d37d2adf99e4788261aff1ae8e5bf63c4abac2864c9ea4dd9e018507c44",
+    "matches_pinned_debian_executable": true,
+    "output_format": "XML",
+    "timestamp_precision": "whole UTC seconds; fractional FILETIME ticks are not compared"
+  },
+  "corpus": {
+    "corpus_id": "rbf-synthetic-v1",
+    "manifest_sha256": "01697a0e910e3a8b4b908ea3b92223d620f820d6068140e7d5c27dd026c584c1",
+    "kind": "synthetic; not a Windows acquisition"
+  },
+  "windows_samples": null,
+  "scope": {
+    "fields": [
+      "format_version",
+      "original_path",
+      "original_size",
+      "deleted_at_utc"
+    ],
+    "time_comparison": "whole UTC seconds only",
+    "not_cross_validated": [
+      "subsecond FILETIME precision and raw ticks",
+      "payload pairing, hashing, inventory, filters, or exports",
+      "malformed input acceptance or complete Windows-version compatibility"
+    ],
+    "allow_documented_reference_differences": true,
+    "ground_truth": "independent expected fields checked for every decoded record"
+  },
+  "summary": {
+    "compared_records": 12,
+    "matching_records": 10,
+    "excluded_records": 8,
+    "documented_reference_differences": 2,
+    "unexplained_differences": 0,
+    "ground_truth_differences": 0,
+    "ground_truth_checked_records": 12,
+    "reference_warning_records": 2
+  },
+  "results": [
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV10001.txt",
+      "source_sha256": "79b310b674947393b7041aea04732494d823d5bbac400a70d53b454f6722f8da",
+      "source_bytes": 544,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 1,
+        "original_size": 6,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\notes.txt",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 1,
+        "original_path": "C:\\Demo\\notes.txt",
+        "original_size": 6,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "v1-ascii",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 1,
+          "original_path": "C:\\Demo\\notes.txt",
+          "original_size": 6,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IV20002.txt",
+      "source_sha256": "e3c2c3c6127fdeac882348fbfedfff00b5f9f0a15e9cb0db7c953a297e4a58c4",
+      "source_bytes": 64,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 8,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\\u8cc7\u6599-\ud83d\udcc4.txt",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\\u8cc7\u6599-\ud83d\udcc4.txt",
+        "original_size": 8,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "v2-unicode",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\\u8cc7\u6599-\ud83d\udcc4.txt",
+          "original_size": 8,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IZERO03.bin",
+      "source_sha256": "d5fb764f0abe328ec1628ac66f4ca19f23842c4dbf17b40ba3fed05ebfb0f764",
+      "source_bytes": 64,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 0,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\empty.bin",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\empty.bin",
+        "original_size": 0,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "zero-size",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\empty.bin",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILARGE04.bin",
+      "source_sha256": "e1178762978c5ccde86699dfd426e4c3d25d59bc280d6229c724c45402ec99b0",
+      "source_bytes": 64,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 9007199254740995,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\large.bin",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\large.bin",
+        "original_size": 9007199254740995,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "large-uint64",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\large.bin",
+          "original_size": 9007199254740995,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMAX005.bin",
+      "source_sha256": "c816985180c2bf9292f15dd496fb540494a46c849bd74b33d0bc2001372451e6",
+      "source_bytes": 544,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [
+        {
+          "field": "original_size",
+          "rbf": 18446744073709551615,
+          "reference": -1,
+          "classification": "documented_reference_difference",
+          "reason": "rifiuti2 0.8.2 formats unsigned QWORD sizes through a signed 64-bit value"
+        }
+      ],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 1,
+        "original_size": 18446744073709551615,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\max.bin",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 1,
+        "original_path": "C:\\Demo\\max.bin",
+        "original_size": -1,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "different",
+      "id": "max-uint64",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 1,
+          "original_path": "C:\\Demo\\max.bin",
+          "original_size": 18446744073709551615,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITICK06.txt",
+      "source_sha256": "9a7d724297c743576cec26c5fd0ced400ddbf7a2c0a17aeae22617632bb099c4",
+      "source_bytes": 62,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 5,
+        "deletion_filetime": 133485408001234568,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234568Z",
+        "original_path": "C:\\Demo\\tick.txt",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\tick.txt",
+        "original_size": 5,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "adjacent-tick",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\tick.txt",
+          "original_size": 5,
+          "deletion_filetime": 133485408001234568,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234568Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IMISS07.pdf",
+      "source_sha256": "ecc92fe4f6eba2a366a71cf9e64302ae620d1758eb5989db32174406f4127783",
+      "source_bytes": 68,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 1024,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\missing.pdf",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\missing.pdf",
+        "original_size": 1024,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "missing-payload",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\missing.pdf",
+          "original_size": 1024,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ISIZE08.txt",
+      "source_sha256": "133818e073333ae705fa53aac24c89835963eb48ae12a21d4d9880ffd65524b6",
+      "source_bytes": 70,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 100,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\mismatch.txt",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\mismatch.txt",
+        "original_size": 100,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "size-mismatch",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\mismatch.txt",
+          "original_size": 100,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IDIR009",
+      "source_sha256": "5c42d5e511b285682300a0a4f0baf925df1d3aa3ff810b516875b708b9929d71",
+      "source_bytes": 58,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 0,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\folder",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\folder",
+        "original_size": 0,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "paired-folder",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\folder",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITIME10.txt",
+      "source_sha256": "09a77110fc5ea5536f859e60925aa28878df7bd1770cd6c1b6b3223b9ff86d3c",
+      "source_bytes": 78,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [
+        {
+          "field": "deleted_at_utc",
+          "rbf": null,
+          "reference": "1601-01-01T00:00:00Z",
+          "classification": "documented_reference_difference",
+          "reason": "RBF treats zero FILETIME as unknown; rifiuti2 0.8.2 renders the epoch and flags a suspicious deletion time"
+        }
+      ],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 0,
+        "deletion_filetime": 0,
+        "deleted_at_utc": null,
+        "original_path": "C:\\Demo\\unknown-time.txt",
+        "warnings": [
+          "zero_deletion_time"
+        ]
+      },
+      "reference_exit_code": 5,
+      "reference_diagnostics": "Error occurred in following record:\n$ITIME10.txt: File deletion time is suspicious or broken",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\unknown-time.txt",
+        "original_size": 0,
+        "deleted_at_utc": "1601-01-01T00:00:00Z"
+      },
+      "status": "different",
+      "id": "unknown-time",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\unknown-time.txt",
+          "original_size": 0,
+          "deletion_filetime": 0,
+          "deleted_at_utc": null
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ITAIL11.txt",
+      "source_sha256": "f607f63bffbdc8c709ff5f22ead32cc584dc6e7893edb15479257b2d1c1aebd2",
+      "source_bytes": 74,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 0,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\trailing.txt",
+        "warnings": [
+          "trailing_data"
+        ]
+      },
+      "reference_exit_code": 5,
+      "reference_diagnostics": "Error occurred in following record:\n$ITAIL11.txt: Ignored dangling extraneous data after record",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\trailing.txt",
+        "original_size": 0,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match_with_reference_warning",
+      "id": "trailing-bytes",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\trailing.txt",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$ILONG12.txt",
+      "source_sha256": "02e13904918f64ac5b66e99903b2da0f78498d742786450ed76cb32993bb4902",
+      "source_bytes": 762,
+      "compared_fields": [
+        "format_version",
+        "original_path",
+        "original_size",
+        "deleted_at_utc"
+      ],
+      "differences": [],
+      "ground_truth_differences": [],
+      "rbf": {
+        "format_version": 2,
+        "original_size": 0,
+        "deletion_filetime": 133485408001234567,
+        "deleted_at_utc": "2024-01-01T00:00:00.1234567Z",
+        "original_path": "C:\\Demo\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\long.txt",
+        "warnings": []
+      },
+      "reference_exit_code": 0,
+      "reference_diagnostics": "",
+      "reference": {
+        "format_version": 2,
+        "original_path": "C:\\Demo\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\long.txt",
+        "original_size": 0,
+        "deleted_at_utc": "2024-01-01T00:00:00Z"
+      },
+      "status": "match",
+      "id": "long-path",
+      "ground_truth_checked": true,
+      "ground_truth": {
+        "kind": "synthetic_manifest",
+        "expected_fields": {
+          "format_version": 2,
+          "original_path": "C:\\Demo\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\folder\\long.txt",
+          "original_size": 0,
+          "deletion_filetime": 133485408001234567,
+          "deleted_at_utc": "2024-01-01T00:00:00.1234567Z"
+        },
+        "deletion_filetime_interval": null
+      }
+    }
+  ],
+  "excluded": [
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD013.bin",
+      "source_sha256": "070b13c004e9475fa155cd84d90de9f87db1b7dea6707329638a6ce66043d246",
+      "source_bytes": 3,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "truncated_header",
+      "reference_exit_code": 4,
+      "reference_diagnostics": "Fatal error: No valid recycle bin record found\nError occurred in following record:\n$IBAD013.bin: File is not a $Recycle.bin index",
+      "reference_records_emitted": null,
+      "reference_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "truncated-header",
+      "ground_truth_checked": false
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD014.bin",
+      "source_sha256": "77f5999df8f198d6e44996e8311f7cad948f1275bb40f074a25cf492a21e354d",
+      "source_bytes": 24,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "truncated_path",
+      "reference_exit_code": 4,
+      "reference_diagnostics": "Fatal error: No valid recycle bin record found\nError occurred in following record:\n$IBAD014.bin: File is not a $Recycle.bin index",
+      "reference_records_emitted": null,
+      "reference_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "truncated-v1-path",
+      "ground_truth_checked": false
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD015.bin",
+      "source_sha256": "e5876427b1addb63603bbf1056a82b5970942e3b2c2ebdb3bb9ef0c5bd869660",
+      "source_bytes": 30,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "truncated_path",
+      "reference_exit_code": 5,
+      "reference_diagnostics": "Error occurred in following record:\n$IBAD015.bin: Record is truncated, thus unicode path might be incomplete",
+      "reference_records_emitted": 1,
+      "reference_output_sha256": "a0175441521287de66b30c9a5245d81cfd14fb7b6f8fcede37997c979491b23a",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "truncated-v2-path",
+      "ground_truth_checked": false
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD016.bin",
+      "source_sha256": "ade265c55187925f2023feb1c3b483f1b4ceb1911820d58430652993f94eac26",
+      "source_bytes": 24,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "unsupported_version",
+      "reference_exit_code": 4,
+      "reference_diagnostics": "Fatal error: No valid recycle bin record found\nError occurred in following record:\n$IBAD016.bin: File is not a $Recycle.bin index",
+      "reference_records_emitted": null,
+      "reference_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "unsupported-version",
+      "ground_truth_checked": false
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD017.bin",
+      "source_sha256": "bc0345594a4a7380483c51b663453f8740ba0aa0c2e03b6d283e31e427d82ded",
+      "source_bytes": 32,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "invalid_utf16",
+      "reference_exit_code": 5,
+      "reference_diagnostics": "Error occurred in following record:\n$IBAD017.bin: Path contains broken unicode character(s), at offset: 0",
+      "reference_records_emitted": 1,
+      "reference_output_sha256": "f34d2e54a230fd4948323edf8b4ed2234427f735f19ad534b18ee000115e071e",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "invalid-utf16",
+      "ground_truth_checked": false
+    },
+    {
+      "source": "evidence/$Recycle.Bin/S-1-5-21-111111111-222222222-333333333-1001/$IBAD018.bin",
+      "source_sha256": "72fe58c375161afb81cd9ebb83375bf0d2609eb44bf4e02a1a671ed83cb27094",
+      "source_bytes": 28,
+      "compared_fields": [],
+      "differences": [],
+      "ground_truth_differences": [],
+      "status": "not_comparable",
+      "rbf_error_code": "invalid_path_length",
+      "reference_exit_code": 4,
+      "reference_diagnostics": "Fatal error: No valid recycle bin record found\nError occurred in following record:\n$IBAD018.bin: File is not a $Recycle.bin index",
+      "reference_records_emitted": null,
+      "reference_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "interpretation": "Diagnostic only; malformed-input behavior is not a field agreement",
+      "id": "invalid-path-length",
+      "ground_truth_checked": false
+    },
+    {
+      "id": "orphan-file",
+      "reason": "Orphan payload has no $I metadata to compare"
+    },
+    {
+      "id": "orphan-folder",
+      "reason": "Orphan payload has no $I metadata to compare"
+    }
+  ]
+}
