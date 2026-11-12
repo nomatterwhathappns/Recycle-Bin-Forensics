@@ -87,10 +87,5 @@ def test_actual_gui_smoke_renders_and_exports(tmp_path):
     assert gui.main(["--smoke-test", "--smoke-output", str(destination)]) == 0
     result = json.loads(destination.read_text("utf-8"))
     assert result["version"] == __version__
-    assert result["checks"] == {
-        "tk": True,
-        "parser": True,
-        "widgets": True,
-        "timezone": True,
-        "export": True,
-    }
+    assert {"tk", "parser", "widgets", "timezone", "export"} <= result["checks"].keys()
+    assert all(value is True for value in result["checks"].values())

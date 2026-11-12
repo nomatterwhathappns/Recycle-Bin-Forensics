@@ -1,5 +1,5 @@
 [run]
-source = rbinforensics.gui
+source = rbinforensics.gui,rbinforensics.detail_view
 branch = True
 
 [report]

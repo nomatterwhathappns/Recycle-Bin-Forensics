@@ -1,6 +1,6 @@
 # Report schema, version 2.0
 
-Application releases **1.0.0** and **1.1.0** emit completed-report schema **2.0**. Desktop progress and cancellation are run-control signals, not new evidence fields. A cancelled scan does not emit a completed report. These version numbers describe different contracts. The [current JSON Schema](../schemas/report-v2.schema.json) describes the expanded report; the [historical schema 1.0](../schemas/report-v1.schema.json) remains available for earlier development reports.
+Application releases **1.0.0**, **1.1.0**, and **1.2.0** emit completed-report schema **2.0**. Desktop progress, cancellation, layout, text size, and column sorting are run/presentation controls, not new evidence fields. A cancelled scan does not emit a completed report. Desktop column sorting does not reorder report records or change the selection's deletion timeline. These version numbers describe different contracts. The [current JSON Schema](../schemas/report-v2.schema.json) describes the expanded report; the [historical schema 1.0](../schemas/report-v1.schema.json) remains available for earlier development reports.
 
 JSON is the complete structured audit report. Terminal, CSV, and HTML are views of the selected records. Schema validation checks structure, types, and supported values; it does not authenticate evidence or certify an interpretation.
 

@@ -1,13 +1,13 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.1.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.2.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
 1. Open this repository on GitHub and select **Actions**.
 2. Open a successful run of the [Windows package workflow](../.github/workflows/windows-package.yml).
 3. Download the `RecycleBinForensics-windows-x64` artifact from that run. GitHub may wrap its files in an artifact ZIP; extract that wrapper first.
-4. Locate the versioned portable ZIP and `SHA256SUMS.txt`. For 1.1.0, the package name is `RecycleBinForensics-1.1.0-windows-x64.zip`.
+4. Locate the versioned portable ZIP and `SHA256SUMS.txt`. For 1.2.0, the package name is `RecycleBinForensics-1.2.0-windows-x64.zip`.
 5. Extract the portable ZIP to a chosen application folder. Keep all extracted files and subdirectories together.
 6. Open `RecycleBinForensics.exe` inside the extracted application folder.
 
@@ -16,7 +16,7 @@ The portable build contains Python, Tcl/Tk, and the timezone database it needs; 
 Compare the ZIP's SHA-256 with the supplied checksum file when transferring or archiving a build:
 
 ```powershell
-Get-FileHash .\RecycleBinForensics-1.1.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\RecycleBinForensics-1.2.0-windows-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
@@ -35,6 +35,20 @@ rbf gui
 Python must include Tk support and have access to a graphical display. `python -m tkinter` opens a small test window when the installation supports Tk. Some Linux distributions provide Tk separately; for example, Debian/Ubuntu system Python uses the matching `python3-tk` package. A virtual environment still depends on the Tk support of the Python that created it. Use a package appropriate to that interpreter rather than assuming another Python installation's Tk will be available.
 
 UTC operation does not require a third-party timezone dependency. Install `.[timezone]` when the source environment lacks the IANA database needed for a named zone. The portable Windows build includes that database.
+
+### Updating a source installation on Parrot/Linux
+
+Close the application before replacing its installed code. In an existing checkout with its virtual environment, run:
+
+```sh
+git pull --ff-only
+source .venv/bin/activate
+python -m pip install '.[timezone]'
+rbf --version
+rbf-gui
+```
+
+The expected version is `rbf 1.2.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 
@@ -68,13 +82,13 @@ If a job is still active when the window is closed, the app asks whether to requ
 
 ## 3. Review the results
 
-Open **Hasil analisis** after a completed run. The full-scan summary describes all supplied evidence, while the shown-record count describes the current selection.
+Open **Hasil analisis** after a completed run. The compact full-scan summary describes all supplied evidence, while the shown-record count describes the current selection. The table fills the available width; the grouped detail area is below it.
 
 - **Inventaris** presents metadata and orphan payload observations.
 - **Timeline** uses decoded deletion FILETIME values. Unknown deletion times stay unknown; payload modification times are not substituted.
 - **Perlu ditinjau** exposes all records with issues from the full scan, including records outside the current inventory filter.
 
-Use the search, extension, SID, date, and original-size controls to narrow the view, then select **Terapkan**. Enter alternative extensions separated by commas, for example `.pdf,.docx`. Different filter categories combine with AND; alternative extensions combine with OR. **Reset** rebuilds the view from the complete scan rather than from the currently visible subset.
+Quick search remains visible. Expand the advanced filters when extension, SID, date, or original-size criteria are needed, then select **Terapkan**. Folding the controls away preserves their values and the active selection; it does not silently reset a filter. Check the shown-record count and active-filter indication when a smaller view is in use. Enter alternative extensions separated by commas, for example `.pdf,.docx`. Different filter categories combine with AND; alternative extensions combine with OR. **Reset** rebuilds the view from the complete scan rather than from the currently visible subset.
 
 The calendar buttons choose **UTC dates**. A date-only **Dari** starts at UTC midnight. A date-only **Sampai** includes that entire UTC day through `23:59:59.9999999Z`. Explicit ISO datetimes with `Z` or an offset can also be entered. This is a GUI convenience: CLI date-only `--deleted-before` still means midnight at the start of the date. The GUI records its expanded end-of-day bound in the report selection, so the exact request can be reproduced. Display timezone does not change date-filter meaning.
 
@@ -82,7 +96,34 @@ Diagnostic records remain visible according to the same rules as CLI reports. An
 
 Tables show up to 200 records per page. Use the arrow buttons and range counter to browse further pages. Pagination is a display limit, not a scan or export limit; all completed scan records remain available to the report formats.
 
-Select a row to inspect provenance and the decoded fields: acquired path, original path, original size, UTC/display time, raw FILETIME, payload status, source hash, payload hash where computed, and issue codes. **Salin detail** copies the shown detail text. **Salin hash** copies the payload hash when one was computed, otherwise the source hash. Both hashes remain separately labelled in the details. Treat copied paths and hashes as case data.
+### Give the table or details more room
+
+Drag the horizontal separator between the table and detail area to change their relative heights. The areas retain usable minimum sizes. **Perbesar detail** opens the selected record in a separate resizable window, which can be maximized through the operating system. The enlarged window follows the current selection; clearing a selection, changing pages, or starting another scan must not leave a different record looking current in that window.
+
+Compare the [compact workspace preview](images/desktop-compact.png) with the [enlarged detail preview](images/desktop-detail.png). Both use fictitious demonstration records.
+
+Text-size controls adjust the desktop fonts for the current session. The supported range is 9–16 points, with 11 as the initial size. Font changes preserve the selected record, filter values, and evidence data. These settings do not write preferences or case history to disk. Native fonts and window decorations vary between platforms.
+
+### Read grouped detail fields
+
+Select a row to populate the detail area. Its groups separate the questions an examiner normally asks:
+
+| Group | What to inspect |
+| --- | --- |
+| **Ringkasan** | Recorded original path, acquired source path, important time/size values, and distinct metadata/payload states |
+| **Metadata** | Encoded format version, original size, raw FILETIME, UTC/display timestamp, SID context, and metadata source size |
+| **Payload** | Observed sibling classification, acquired path, regular-file size, size comparison, and hashing availability |
+| **Hash & sumber** | Explicitly labelled source and payload SHA-256 values and provenance information |
+
+A successful metadata decode and a missing payload can both be true. The detail view therefore describes metadata as successfully read while separately saying that no payload was found; it does not present a single `ok` label as evidence that content exists. An orphan has no decoded original path or deletion time. Source size means metadata-file bytes for a metadata record; it refers to the observed payload for an orphan record.
+
+Long paths and hashes remain selectable, with copy controls for fields that need exact transfer. **Salin seluruh detail** copies the complete grouped detail representation. **Salin hash** copies a computed payload hash when available, otherwise the source hash, and identifies which object was copied in the status message. Source and payload hashes also have separate field-copy controls. Treat copied values as case data. Control characters are shown as escapes in the desktop, while JSON retains the original logical strings.
+
+### Sort a complete table view
+
+Click a path, deletion-time, size, or status heading to sort the complete table view; click again to reverse its direction. Sorting happens before the 200-row page is taken, so an item on a later page can move to the first page. Raw integer FILETIME and size values are compared exactly, including values above JavaScript's safe-integer range. Zero-byte files are known-size observations; unknown values stay at the end in both directions.
+
+Column sorting is a presentation control. It does not modify baseline scan records, the analytical deletion timeline, or exported report ordering. A manual sort can change the displayed order of the Timeline table; choose its deletion-time column in ascending order for a chronological view. Moving to another page or rebuilding a filtered table clears a detail selection that is no longer current. Font resizing preserves the current selection instead.
 
 | State | Meaning |
 | --- | --- |

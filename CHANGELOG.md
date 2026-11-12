@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+
+- A full-width detail area below the results table, with an adjustable table/detail separator.
+- A resizable separate detail window and grouped summary, metadata, payload, and hash/source fields.
+- Quick search with foldable advanced filters, a compact full-scan summary, and adjustable desktop text size.
+- Clickable desktop column headings to sort the complete view by path, deletion time, size, or status before pagination.
+- Presentation and native-widget regression coverage for detail selection, sorting precision, font changes, and workspace sizing.
+
+### Changed
+
+- Application/package version is `1.2.0`; completed JSON reports remain schema `2.0`.
+- Detail labels distinguish successfully decoded metadata from missing or unavailable payload content.
+- Desktop sorting uses raw integer FILETIME/size values and keeps unknown values at the end in either direction. It does not reorder exported report records or fabricate missing values.
+- Changing a page, filter, or scan scope clears details for a selection that is no longer visible; enlarged details follow the current selection.
+- Display size and pane position are session controls, not persistent case data.
+
 ## 1.1.0
 
 ### Added

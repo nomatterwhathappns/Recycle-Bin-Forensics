@@ -100,6 +100,41 @@ def _scan(app, source, *, count=1):
     assert app.session.report is not None
 
 
+def _activate_tree(app, tree):
+    child = tree
+    while child.master is not None:
+        parent = child.master
+        if parent.winfo_class() == "TNotebook":
+            parent.select(child)
+            app.update()
+            return
+        child = parent
+    pytest.fail("Result table is not attached to a notebook tab")
+
+
+def _select(app, tree, row=None):
+    _activate_tree(app, tree)
+    row = row or tree.get_children()[0]
+    tree.selection_set(row)
+    tree.focus(row)
+    tree.event_generate("<<TreeviewSelect>>")
+    app.update()
+    assert not app._test_callback_errors, app._test_callback_errors
+    return app._row_objects[tree][row]
+
+
+def _visible_records(app, tree):
+    return [app._row_objects[tree][row] for row in tree.get_children()]
+
+
+def _click_heading(app, tree, column):
+    callback = tree.heading(column, "command")
+    assert callback, f"Column {column} has no interactive sorting command"
+    tree.tk.call(callback)
+    app.update()
+    assert not app._test_callback_errors, app._test_callback_errors
+
+
 def test_empty_input_shows_error_without_starting_job(app):
     app.source_var.set("")
     app.start_scan()
@@ -177,7 +212,7 @@ def test_real_scan_populates_inventory_timeline_and_exact_details(app, evidence)
     app.inventory.focus(row)
     app.inventory.event_generate("<<TreeviewSelect>>")
     app.update()
-    details = app.details.get("1.0", "end")
+    details = app.detail_panel.get_text()
     assert r"C:\Users\Analyst\report.pdf" in details
     assert str(TICKS) in details
     assert "2024-01-01T00:00:00.1234567Z" in details
@@ -188,6 +223,280 @@ def test_real_scan_populates_inventory_timeline_and_exact_details(app, evidence)
     app.copy_details()
     app.update()
     assert str(TICKS) in app.clipboard_get()
+
+
+def test_metadata_and_missing_payload_have_separate_clear_statuses(app, evidence):
+    (evidence / "$RABC.pdf").unlink()
+    _scan(app, evidence)
+    _select(app, app.inventory)
+    assert app.detail_panel.get_value("metadata_status") == "Berhasil dibaca"
+    assert app.detail_panel.get_value("payload_status") == "Tidak ditemukan"
+    assert "Payload hilang" in app.inventory.item(app.inventory.get_children()[0], "values")
+    assert app.session.report["records"][0]["status"] == "ok"
+
+
+def test_empty_scope_can_be_reviewed_sorted_and_exported_without_invented_findings(app, tmp_path):
+    directory = tmp_path.resolve() / "empty-evidence"
+    directory.mkdir()
+    app.source_var.set(str(directory))
+    app.start_scan()
+    _pump(app, lambda: app.session.state == "complete" and not app._awaiting_terminal)
+    assert app.session.report["records"] == []
+    assert not app.inventory.get_children()
+    assert app.detail_panel.record is None
+    assert app.detail_button.instate(("disabled",))
+    _click_heading(app, app.inventory, "size")
+    assert not app.inventory.get_children()
+    target = tmp_path.resolve() / "empty-scope.json"
+    app.export_report("json", target)
+    _pump(app, lambda: app.session.state == "complete" and app._last_export == target)
+    report = json.loads(target.read_text("utf-8"))
+    assert report["summary"]["candidates"] == 0
+    assert report["summary"]["orphan_payloads"] == 0
+    assert report["records"] == []
+
+
+def test_advanced_filters_collapse_preserves_values_and_recovers_workspace(app, evidence):
+    _scan(app, evidence)
+    app.geometry("1366x768")
+    app.update()
+    assert not app.filters_visible.get()
+    assert not app.advanced_filters.winfo_ismapped()
+    assert app.filter_toggle.winfo_ismapped()
+    collapsed_height = app.results_split.winfo_height()
+    app.filter_toggle.invoke()
+    app.update()
+    assert app.filters_visible.get()
+    assert app.advanced_filters.winfo_ismapped()
+    expanded_height = app.results_split.winfo_height()
+    assert collapsed_height >= expanded_height + 40
+    app.after_var.set("2024-01-01")
+    app.before_var.set("2024-01-01")
+    app.extension_var.set(".pdf")
+    app.min_size_var.set("1")
+    app.filter_toggle.invoke()
+    app.update()
+    assert not app.advanced_filters.winfo_ismapped()
+    assert (
+        app.after_var.get(),
+        app.before_var.get(),
+        app.extension_var.get(),
+        app.min_size_var.get(),
+    ) == ("2024-01-01", "2024-01-01", ".pdf", "1")
+    app.apply_filters()
+    _pump(app, lambda: not app._awaiting_terminal and app.session.state == "complete")
+    assert app.session.view["selection"]["matched"] == 1
+    assert app.session.view["selection"]["filters"]["extensions"] == [".pdf"]
+
+
+def test_vertical_workspace_keeps_wide_detail_and_adjustable_split(app, evidence):
+    _scan(app, evidence)
+    for geometry in ("1366x768", "1000x700"):
+        app.geometry(geometry)
+        app.update()
+        assert str(app.results_split.cget("orient")) == "vertical"
+        assert app.inventory.winfo_height() >= 100
+        assert app.detail_panel.winfo_height() >= 150
+        assert app.detail_panel.winfo_width() >= app.results_split.winfo_width() - 20
+        assert app.progress.winfo_ismapped()
+        assert app.cancel_button.winfo_ismapped()
+        assert app.detail_button.winfo_ismapped()
+        assert (
+            app.detail_button.winfo_rooty() + app.detail_button.winfo_height()
+            <= app.progress.winfo_rooty()
+        )
+    app.geometry("1366x900")
+    app.update()
+    original = app.results_split.sash_coord(0)[1]
+    app.results_split.sash_place(0, 0, original + 20)
+    app.update()
+    assert app.results_split.sash_coord(0)[1] >= original + 15
+
+
+def test_popout_follows_selection_and_clears_without_stale_evidence(app, evidence):
+    _item(evidence, "NOTE.txt", r"C:\Users\Analyst\note.txt")
+    _scan(app, evidence, count=2)
+    _select(app, app.inventory)
+    app.detail_button.invoke()
+    app.update()
+    window = app.detail_window
+    assert window.winfo_exists()
+    assert window.winfo_toplevel() is window
+    assert window is not app
+    assert window.tk is app.tk
+    assert window.detail_view.get_value("original_path") == r"C:\Users\Analyst\report.pdf"
+    window.detail_view.notebook.select(3)
+    app.update()
+    window.detail_view.copy_buttons[("Hash & sumber", "payload_sha256")].invoke()
+    app.update()
+    assert app.clipboard_get() == hashlib.sha256(b"payload").hexdigest()
+    app.open_details()
+    assert app.detail_window is window
+    _select(app, app.inventory, app.inventory.get_children()[1])
+    assert window.detail_view.get_value("original_path") == r"C:\Users\Analyst\note.txt"
+    app.query_var.set("no-artifact-can-match")
+    app.apply_filters()
+    _pump(app, lambda: not app._awaiting_terminal and not app.inventory.get_children())
+    assert app.detail_panel.record is None
+    assert window.detail_view.record is None
+    assert "note.txt" not in window.detail_view.get_text()
+    app.reset_filters()
+    _pump(app, lambda: not app._awaiting_terminal and len(app.inventory.get_children()) == 2)
+    _select(app, app.inventory)
+    assert window.detail_view.get_value("original_path") == r"C:\Users\Analyst\report.pdf"
+    window.destroy()
+    app.open_details()
+    app.update()
+    assert app.detail_window.winfo_exists()
+    assert app.detail_window is not window
+    assert not app._test_destroyed.is_set()
+
+
+def test_detail_popout_requires_selected_evidence(app, evidence):
+    app.open_details()
+    assert getattr(app, "detail_window", None) is None
+    _scan(app, evidence)
+    _select(app, app.inventory)
+    assert app.detail_button.instate(("!disabled",))
+    app.inventory.selection_remove(*app.inventory.selection())
+    app.inventory.event_generate("<<TreeviewSelect>>")
+    app.update()
+    assert app.detail_panel.record is None
+    assert app.detail_button.instate(("disabled",))
+    app.open_details()
+    assert getattr(app, "detail_window", None) is None
+
+
+def test_active_result_tab_never_displays_a_hidden_other_tab_record(app, evidence):
+    (evidence / "$RLONE.bin").write_bytes(b"orphan")
+    _scan(app, evidence, count=2)
+    orphan = next(
+        row
+        for row in app.inventory.get_children()
+        if app._row_objects[app.inventory][row]["record_type"] == "orphan_payload"
+    )
+    _select(app, app.inventory, orphan)
+    app.open_details()
+    window = app.detail_window
+    assert window.detail_view.record["source_name"] == "$RLONE.bin"
+    _activate_tree(app, app.timeline)
+    assert app.detail_panel.record is None
+    assert window.detail_view.record is None
+    _select(app, app.timeline)
+    assert app.detail_panel.get_value("original_path") == r"C:\Users\Analyst\report.pdf"
+    _activate_tree(app, app.inventory)
+    # A returning tab may restore its own selected row, but must never retain
+    # an unrelated row from the previously active table.
+    selected = app.inventory.selection()
+    if selected:
+        assert app.detail_panel.record is app._row_objects[app.inventory][selected[0]]
+        assert window.detail_view.record is app.detail_panel.record
+    else:
+        assert app.detail_panel.record is None
+
+
+def test_font_controls_preserve_current_evidence_view_and_detail_window(app, evidence):
+    from tkinter import font
+
+    _scan(app, evidence)
+    record = _select(app, app.inventory)
+    app.open_details()
+    app.update()
+    window = app.detail_window
+    baseline = json.dumps(app.session.report, sort_keys=True)
+    app.query_var.set("report")
+    app.detail_panel.notebook.select(3)
+    selected_tab = app.detail_panel.notebook.select()
+    selected_row = app.inventory.selection()
+    query_entry = next(
+        widget
+        for widget in app.filter_inputs
+        if widget.winfo_class() == "TEntry" and widget.cget("textvariable") == str(app.query_var)
+    )
+    assert (
+        font.Font(root=app, font=query_entry.cget("font")).actual("size") == app.font_size_var.get()
+    )
+    path_widget = app.detail_panel.field_widgets[("Ringkasan", "original_path")]
+    previous_size = font.Font(root=app, font=path_widget.cget("font")).actual("size")
+    app.change_font_size(2)
+    app.update()
+    assert app.font_size_var.get() == 13
+    assert font.Font(root=app, font=query_entry.cget("font")).actual("size") == 13
+    assert font.Font(root=app, font=path_widget.cget("font")).actual("size") > previous_size
+    popup_path = window.detail_view.field_widgets[("Ringkasan", "original_path")]
+    assert font.Font(root=app, font=popup_path.cget("font")).actual("size") == 13
+    assert app.inventory.selection() == selected_row
+    assert app._selected_record is record
+    assert app.detail_panel.notebook.select() == selected_tab
+    assert window.detail_view.get_value("original_path") == r"C:\Users\Analyst\report.pdf"
+    assert app.query_var.get() == "report"
+    for _ in range(12):
+        app.change_font_size(1)
+    assert app.font_size_var.get() == 16
+    assert app.font_larger.instate(("disabled",))
+    for _ in range(12):
+        app.change_font_size(-1)
+    assert app.font_size_var.get() == 9
+    assert app.font_smaller.instate(("disabled",))
+    assert json.dumps(app.session.report, sort_keys=True) == baseline
+
+
+def test_heading_sorting_is_exact_and_keeps_unknown_values_last(app, tmp_path):
+    directory = tmp_path.resolve() / "sort-evidence"
+    directory.mkdir()
+    sizes = {"A.txt": 2**53 + 1, "B.txt": 2**53, "C.txt": 2**64 - 1}
+    for suffix, size in sizes.items():
+        source = _item(
+            directory,
+            suffix,
+            rf"C:\Sort\{suffix}",
+            ticks=TICKS + (0 if suffix == "B.txt" else 1 if suffix == "A.txt" else 2),
+        )
+        raw = bytearray(source.read_bytes())
+        struct.pack_into("<Q", raw, 8, size)
+        source.write_bytes(raw)
+    (directory / "$RUNKNOWN").mkdir()
+    _scan(app, directory, count=4)
+    baseline = json.dumps(app.session.view, sort_keys=True)
+    for column in ("size", "time"):
+        _click_heading(app, app.inventory, column)
+        assert [r["source_name"] for r in _visible_records(app, app.inventory)] == [
+            "$IB.txt",
+            "$IA.txt",
+            "$IC.txt",
+            "$RUNKNOWN",
+        ]
+        _click_heading(app, app.inventory, column)
+        assert [r["source_name"] for r in _visible_records(app, app.inventory)] == [
+            "$IC.txt",
+            "$IA.txt",
+            "$IB.txt",
+            "$RUNKNOWN",
+        ]
+    assert json.dumps(app.session.view, sort_keys=True) == baseline
+
+
+def test_sorting_orders_the_full_selection_before_pagination(app, tmp_path):
+    from rbinforensics.gui import PAGE_SIZE
+
+    directory = tmp_path.resolve() / "global-sort-evidence"
+    directory.mkdir()
+    for index in range(PAGE_SIZE + 1):
+        source = _item(directory, f"SIZE{index:04d}.txt", rf"C:\Sort\file-{index:04d}.txt")
+        raw = bytearray(source.read_bytes())
+        struct.pack_into("<Q", raw, 8, index)
+        source.write_bytes(raw)
+    _scan(app, directory, count=PAGE_SIZE)
+    baseline = json.dumps(app.session.report, sort_keys=True)
+    _click_heading(app, app.inventory, "size")
+    _click_heading(app, app.inventory, "size")
+    assert _visible_records(app, app.inventory)[0]["metadata"]["original_size"] == PAGE_SIZE
+    assert app._pages[app.inventory] == 0
+    app._page_buttons[app.inventory][1].invoke()
+    app.update()
+    assert len(app.inventory.get_children()) == 1
+    assert _visible_records(app, app.inventory)[0]["metadata"]["original_size"] == 0
+    assert json.dumps(app.session.report, sort_keys=True) == baseline
 
 
 def test_filter_and_clear_use_full_baseline_not_previous_subset(app, evidence):
@@ -218,7 +527,7 @@ def test_filter_and_clear_use_full_baseline_not_previous_subset(app, evidence):
     app.inventory.focus(row)
     app.inventory.event_generate("<<TreeviewSelect>>")
     app.update()
-    assert r"C:\Users\Analyst\note.txt" in app.details.get("1.0", "end")
+    assert r"C:\Users\Analyst\note.txt" in app.detail_panel.get_text()
     app.extension_var.set("")
     app.apply_filters()
     _pump(app, lambda: len(app.inventory.get_children()) == 2)
@@ -237,7 +546,7 @@ def test_unicode_path_and_full_uint64_remain_exact_in_details(app, evidence):
     app.inventory.focus(row)
     app.inventory.event_generate("<<TreeviewSelect>>")
     app.update()
-    details = app.details.get("1.0", "end")
+    details = app.detail_panel.get_text()
     assert "資料" in details
     assert "📄" in details
     assert str(maximum) in details
@@ -442,6 +751,10 @@ def test_second_scan_clears_old_result_before_worker_completion(
     app, evidence, tmp_path, monkeypatch
 ):
     _scan(app, evidence)
+    _select(app, app.inventory)
+    app.open_details()
+    popup = app.detail_window
+    assert popup.detail_view.record is not None
     second = tmp_path.resolve() / "second-evidence"
     second.mkdir()
     _item(second, "NEW.txt", r"D:\Other\new.txt")
@@ -452,9 +765,10 @@ def test_second_scan_clears_old_result_before_worker_completion(
         _pump(app, entered.is_set)
         assert app.session.report is None
         assert not app.inventory.get_children()
-        placeholder = app.details.get("1.0", "end")
+        placeholder = app.detail_panel.get_text()
         assert "report.pdf" not in placeholder
         assert hashlib.sha256(b"payload").hexdigest() not in placeholder
+        assert popup.detail_view.record is None
     finally:
         release.set()
     _pump(app, lambda: app.session.state == "complete" and bool(app.inventory.get_children()))
@@ -498,22 +812,26 @@ def test_pagination_and_each_tree_keep_details_bound_to_current_row(app, tmp_pat
     app.inventory.selection_set(first)
     app.inventory.event_generate("<<TreeviewSelect>>")
     app.update()
-    assert "page-0000.txt" in app.details.get("1.0", "end")
+    assert "page-0000.txt" in app.detail_panel.get_text()
+    app.open_details()
+    popup = app.detail_window
 
     app._page_buttons[app.inventory][1].invoke()
     app.update()
     assert len(app.inventory.get_children()) == 1
     assert getattr(app, "_selected_record", None) is None
-    assert "page-0000.txt" not in app.details.get("1.0", "end")
+    assert "page-0000.txt" not in app.detail_panel.get_text()
+    assert popup.detail_view.record is None
     last = app.inventory.get_children()[0]
     app.inventory.selection_set(last)
     app.inventory.event_generate("<<TreeviewSelect>>")
     app.update()
-    assert f"page-{PAGE_SIZE:04d}.txt" in app.details.get("1.0", "end")
+    assert f"page-{PAGE_SIZE:04d}.txt" in app.detail_panel.get_text()
 
     for tree, expected in ((app.timeline, "page-0000.txt"), (app.review, "page-0001.txt")):
+        _activate_tree(app, tree)
         first = tree.get_children()[0]
         tree.selection_set(first)
         tree.event_generate("<<TreeviewSelect>>")
         app.update()
-        assert expected in app.details.get("1.0", "end")
+        assert expected in app.detail_panel.get_text()
