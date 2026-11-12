@@ -133,9 +133,47 @@ def test_reject_unsafe_archive_paths_before_staging(assets, tmp_path, name):
     members[name] = b"untrusted member"
     write()
     output = tmp_path / "rejected"
-    with pytest.raises(release.ReleaseError, match="unsafe or duplicate"):
+    # Windows ZipInfo normalizes backslashes to forward slashes. Either the
+    # unsafe-member gate or the application-root gate must refuse that input.
+    with pytest.raises(release.ReleaseError):
         release.prepare_release(windows, checksum, dist, output, COMMIT)
     assert not output.exists()
+
+
+def test_literal_archive_member_guard_rejects_windows_redirect_syntax():
+    assert not release.safe_member("a\\windows-path")
+    assert not release.safe_member("../outside")
+    assert not release.safe_member("C:/outside")
+
+
+def test_owned_temp_alias_is_canonicalized_without_accepting_user_redirects(
+    assets, tmp_path, monkeypatch
+):
+    canonical = tmp_path.resolve()
+    backing = canonical / "system-temp"
+    backing.mkdir()
+    alias = canonical / "temp-alias"
+    try:
+        alias.symlink_to(backing, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Directory symlinks are unavailable on this test host.")
+    allocate = release.tempfile.TemporaryDirectory
+
+    def temporary_directory(*args, **kwargs):
+        if kwargs.get("dir") is None:
+            kwargs["dir"] = alias
+        return allocate(*args, **kwargs)
+
+    monkeypatch.setattr(release.tempfile, "TemporaryDirectory", temporary_directory)
+    windows, checksum, dist, *_ = assets
+    output = canonical / "release-assets"
+    release.prepare_release(windows, checksum, dist, output, COMMIT)
+    release.verify_checksums(output)
+    assert list(backing.iterdir()) == []
+    redirected_output = alias / "user-selected-output"
+    with pytest.raises(ValueError, match="Symlink/reparse-point"):
+        release.prepare_release(windows, checksum, dist, redirected_output, COMMIT)
+    assert not (backing / "user-selected-output").exists()
 
 
 def test_reject_case_colliding_and_redirect_archive_entries(assets):

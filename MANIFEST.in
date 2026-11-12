@@ -1,4 +1,4 @@
-include LICENSE README.md CONTRIBUTING.md SECURITY.md
+include LICENSE README.md CONTRIBUTING.md SECURITY.md .gitattributes
 recursive-include docs *.md *.png
 recursive-include docs/results *.json
 recursive-include examples *.py

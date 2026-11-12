@@ -472,7 +472,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         workloads = []
         commit, dirty = source_commit(), source_tree_dirty()
         with tempfile.TemporaryDirectory(prefix="rbf-benchmark-", dir=args.work_dir) as temporary:
-            workspace = Path(temporary)
+            # The OS may expose its temp root through an alias (macOS /var).
+            # Canonicalize only this newly owned directory; user paths above
+            # retain the normal redirect rejection policy.
+            workspace = Path(temporary).resolve()
             validate_output(workspace, output)
             environment = environment_info(workspace)
             for count in args.counts:
