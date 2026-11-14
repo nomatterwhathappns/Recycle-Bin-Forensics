@@ -42,6 +42,13 @@ def write_report(
     created: dict[Path, tuple[int, int]] = {}
     ownership_handles: list[int] = []
 
+    def close_ownership_handles() -> None:
+        while ownership_handles:
+            try:
+                os.close(ownership_handles.pop())
+            except OSError:
+                pass
+
     def remember_created(path: Path, stream) -> None:
         opened = os.fstat(stream.fileno())
         created[path] = opened.st_dev, opened.st_ino
@@ -132,6 +139,11 @@ def write_report(
             check_owned(output, size)
             check_owned(sidecar, manifest_size)
     except BaseException:
+        # Windows denies unlinking files held by ordinary Python handles.
+        # POSIX retains these references until after rollback to prevent inode
+        # reuse from making an unrelated replacement appear to be ours.
+        if os.name == "nt":
+            close_ownership_handles()
         for path, identity in reversed(tuple(created.items())):
             try:
                 current = path.lstat()
@@ -141,9 +153,5 @@ def write_report(
                 pass
         raise
     finally:
-        for descriptor in ownership_handles:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
+        close_ownership_handles()
     return output

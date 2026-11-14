@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+### Fixed
+
+- Close duplicate ownership handles before failed-export cleanup on Windows, where open handles otherwise prevent removal of partial files. POSIX retains handles through cleanup to protect concurrent replacements.
+
 ## 1.6.0
 
 ### Added
