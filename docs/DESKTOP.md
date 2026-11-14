@@ -1,6 +1,6 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.6.1 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.7.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
@@ -50,7 +50,7 @@ rbf --version
 rbf-gui
 ```
 
-The expected version is `rbf 1.6.1`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
+The expected version is `rbf 1.7.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 
@@ -175,3 +175,7 @@ Native GUI tests, controller tests, cancellation/progress tests, the existing cr
 Saving a report also creates `<report-name>.manifest.json` in the same folder. Keep both files together. The manifest includes the SHA-256 of the exact exported bytes and the case, selection, timezone, and runtime-limit context. A completed JSON analysis counts as saved only when both writes succeed. Existing report or manifest files are never overwritten; choose a new report name when either exists.
 
 Check a saved pair with `rbf verify-export /path/to/report.json`. See [export details](EXPORTS.md).
+
+## Salinan untuk dibagikan
+
+Menu **Ekspor HTML/JSON/CSV** menawarkan ekspor biasa atau **Salinan tersamarkan untuk dibagikan**. Salinan memakai alias untuk path dan SID serta menahan label kasus, nama pemeriksa, teks diagnostik bebas, dan hash bukti. Waktu, ukuran, status, serta kode diagnostik tetap ada. Periksa hasil dan nama file sebelum dibagikan. JSON tersamarkan memiliki kontrak berbeda dan tidak menggantikan penyimpanan JSON lengkap. Pilihan **Simpan JSON** saat menutup/memulai analisis baru selalu menyimpan laporan biasa. Lihat [kebijakan ekspor](EXPORTS.md).

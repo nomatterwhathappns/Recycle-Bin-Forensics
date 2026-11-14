@@ -1294,3 +1294,63 @@ def test_gui_success_means_report_and_manifest_are_verifiable(app, evidence, tmp
     assert not app.session.has_unsaved_report
     assert verify_export(target)["report"]["format"] == "json"
     assert "manifest SHA-256" in app.status_var.get()
+
+
+@pytest.mark.parametrize("format_name", ["json", "csv", "html"])
+def test_gui_sharing_copy_preserves_original_and_unsaved_guard(
+    app, evidence, tmp_path, monkeypatch, format_name
+):
+    from rbinforensics.manifest import verify_export
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    original = json.dumps(baseline, sort_keys=True)
+    target = tmp_path.resolve() / f"sharing.{format_name}"
+    assert app.export_report(format_name, target, redacted=True)
+    _pump(app, lambda: app._last_export == target and not app._worker_running())
+    assert app.session.report is baseline
+    assert json.dumps(baseline, sort_keys=True) == original
+    assert app.session.has_unsaved_report
+    assert "tersamarkan" in app.status_var.get()
+    assert verify_export(target)["forensic_schema_version"] == "sharing-1.0"
+    text = target.read_text("utf-8")
+    assert "Analyst" not in text
+    assert str(evidence) not in text
+    _guard_choice(app, monkeypatch, "cancel")
+    app._on_close()
+    assert not app._test_destroyed.is_set()
+
+
+def test_guard_save_after_sharing_is_always_ordinary_complete_json(
+    app, evidence, tmp_path, monkeypatch
+):
+    from rbinforensics import gui
+
+    _scan(app, evidence)
+    target = tmp_path.resolve() / "sharing.json"
+    app.export_report("json", target, redacted=True)
+    _pump(app, lambda: app._last_export == target and not app._worker_running())
+    _guard_choice(app, monkeypatch, "save")
+    full = tmp_path.resolve() / "complete.json"
+    monkeypatch.setattr(gui.filedialog, "asksaveasfilename", lambda **_: str(full))
+    app._on_close()
+    _pump(app, lambda: app._test_destroyed.is_set())
+    report = json.loads(full.read_text("utf-8"))
+    assert report["schema_version"] == "2.0"
+    assert "Analyst" in report["records"][0]["metadata"]["original_path"]
+    assert not app.session.has_unsaved_report
+
+
+def test_export_menus_select_sharing_and_ordinary_modes(app, evidence, monkeypatch):
+    from rbinforensics import gui
+
+    _scan(app, evidence)
+    calls = []
+    monkeypatch.setattr(app, "export_report", lambda *args, **kwargs: calls.append((args, kwargs)))
+    for button, format_name in zip(app.export_buttons, ("html", "json", "csv"), strict=True):
+        menu = app.nametowidget(str(button.cget("menu")))
+        assert isinstance(menu, gui.tk.Menu)
+        menu.invoke(1)
+        menu.invoke(0)
+        assert calls[-2] == ((format_name,), {"redacted": True})
+        assert calls[-1] == ((format_name,), {})

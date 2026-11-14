@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.6.1**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.6.1` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.7.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.7.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
@@ -643,3 +643,11 @@ Exception batas operasi dipisahkan dari error artefak per-file. Karena itu scann
 `manifest.verify_export()` memeriksa kontrak manifest, ukuran, dan hash laporan yang dipilih pengguna. Perintah `rbf verify-export laporan.json` berguna setelah menyalin atau mengarsipkan laporan. Hash mendeteksi perubahan dibanding manifest yang dipercaya; orang yang bisa mengganti laporan sekaligus manifest dapat menghitung hash baru. Karena itu hasil verifikasi tidak membuktikan identitas pemeriksa, kebenaran bukti, atau chain of custody.
 
 JSON lengkap tetap schema `2.0`; manifest memiliki kontrak terpisah `1.0`. JSON baru dianggap tersimpan oleh `DesktopSession` setelah laporan dan manifest sama-sama berhasil ditulis.
+
+## 33. Ekspor privat dan salinan tersamarkan
+
+`privacy.redact_report()` membangun objek turunan dari daftar field yang diizinkan, sehingga field baru tidak otomatis ikut terbagikan. Penyamaran dilakukan sebelum renderer HTML/CSV/JSON berjalan; atribut HTML seperti `data-search` tidak boleh menyimpan path asli yang hanya disembunyikan dari tampilan. Alias konsisten menjaga hubungan record dengan timeline, sedangkan indeks pilihan tetap sama agar filter tidak dijalankan lagi pada path samaran.
+
+`output.write_report()` tetap memeriksa tujuan terhadap lokasi bukti asli sebelum membentuk turunan. Manifest dibuat dari data turunan yang sudah disamarkan. SHA-256 pada manifest mengidentifikasi file ekspor, sedangkan hash bukti asli ditahan dari salinan. `DesktopSession` hanya mengakui penyimpanan analisis ketika ekspor JSON biasa beserta manifest berhasil.
+
+File POSIX dibuat langsung dengan mode `0600`, bukan baru dibatasi setelah isinya ditulis. Windows mengikuti ACL folder tujuan. Salinan tersamarkan mengurangi identitas, tetapi waktu, ukuran, dan nama file tujuan yang dipilih pengguna masih perlu ditinjau sebelum dibagikan.

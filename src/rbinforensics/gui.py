@@ -172,6 +172,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self._deferred_export_succeeded = False
         self._poll_id = None
         self._last_export: Path | None = None
+        self._export_redacted = False
         self.detail_window = None
         self._sort_state: dict = {}
         self._split_fraction = 0.48
@@ -493,11 +494,20 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         controls.bind("<Configure>", fit_toolbar)
         self.export_buttons = []
         for format_name in ("html", "json", "csv"):
-            button = ttk.Button(
+            button = ttk.Menubutton(
                 controls,
                 text=f"Ekspor {format_name.upper()}",
+            )
+            menu = tk.Menu(button, tearoff=False)
+            menu.add_command(
+                label="Ekspor biasa",
                 command=lambda f=format_name: self.export_report(f),
             )
+            menu.add_command(
+                label="Salinan tersamarkan untuk dibagikan",
+                command=lambda f=format_name: self.export_report(f, redacted=True),
+            )
+            button.configure(menu=menu)
             button.pack(side="right", padx=(4, 0))
             self.export_buttons.append(button)
         fonts = ttk.Frame(controls)
@@ -1141,7 +1151,9 @@ class ForensicsApp(tk.Tk if tk is not None else object):
     def copy_hash(self) -> None:
         self.detail_panel.copy_hash()
 
-    def export_report(self, format_name: str, destination: Path | None = None) -> bool:
+    def export_report(
+        self, format_name: str, destination: Path | None = None, *, redacted: bool = False
+    ) -> bool:
         if self.session.state != "complete" or self._awaiting_terminal:
             self._dialog_error(
                 "Belum ada hasil lengkap", "Ekspor hanya tersedia setelah analisis selesai."
@@ -1151,19 +1163,27 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             if destination is None:
                 path = filedialog.asksaveasfilename(
                     parent=self,
-                    title="Simpan laporan di luar direktori bukti",
+                    title=(
+                        "Simpan salinan tersamarkan — periksa nama file dan isinya"
+                        if redacted
+                        else "Simpan laporan di luar direktori bukti"
+                    ),
                     defaultextension="." + format_name,
-                    initialfile="recycle-bin-report." + format_name,
+                    initialfile=("recycle-bin-sharing." if redacted else "recycle-bin-report.")
+                    + format_name,
                     filetypes=((format_name.upper(), "*." + format_name),),
                 )
                 if not path:
                     return False
                 destination = Path(path)
-            self.session.start_export(destination, format_name, limits=self._limits())
+            self.session.start_export(
+                destination, format_name, limits=self._limits(), redacted=redacted
+            )
         except Exception as exc:
             self._dialog_error("Ekspor gagal", exc)
             return False
-        self.status_var.set("Menyimpan laporan…")
+        self._export_redacted = redacted
+        self.status_var.set("Menyimpan salinan tersamarkan…" if redacted else "Menyimpan laporan…")
         self._awaiting_terminal = True
         self.progress.configure(mode="indeterminate", value=0)
         self.progress.start(15)
@@ -1324,7 +1344,11 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 self.export_status_var.set(
                     "Tersimpan: " + (filename if len(filename) <= 120 else filename[:117] + "…")
                 )
-                self.status_var.set("Laporan dan manifest SHA-256 berhasil disimpan.")
+                self.status_var.set(
+                    "Salinan tersamarkan dan manifest tersimpan; simpan JSON lengkap secara terpisah."
+                    if self._export_redacted
+                    else "Laporan dan manifest SHA-256 berhasil disimpan."
+                )
         if latest is not None and self.session.state == "scanning":
             self._update_progress(latest)
         if self._closing and not self._worker_running() and not self._awaiting_terminal:

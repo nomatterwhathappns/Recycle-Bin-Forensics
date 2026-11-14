@@ -5,13 +5,68 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
+from typing import TextIO
 
 from .limits import WorkLimits, operation_budget
 from .manifest import build_manifest, iter_manifest, manifest_path
 from .reports import iter_render
 from .scanner import EvidenceError, absolute_path, ensure_no_symlinks
+
+
+@contextmanager
+def _open_private(path: Path) -> Iterator[TextIO]:
+    """Claim a new file with private POSIX permissions from its first instant."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags, 0o600)
+    identity = None
+    try:
+        opened = os.fstat(descriptor)
+        identity = opened.st_dev, opened.st_ino
+        stream = os.fdopen(descriptor, "w", encoding="utf-8", newline="")
+    except BaseException:
+        # fdopen can fail before the writer has a stream to register. Retain
+        # ownership while unlinking on POSIX; Windows needs the handle closed.
+        if os.name == "nt":
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if identity is not None:
+            try:
+                current = path.lstat()
+                if stat.S_ISREG(current.st_mode) and (current.st_dev, current.st_ino) == identity:
+                    path.unlink()
+            except OSError:
+                pass
+        if os.name != "nt":
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        raise
+    with stream:
+        yield stream
+
+
+def _sharing_context(context: dict | None) -> dict | None:
+    """Carry only complete, validated numeric phase budgets into sharing files."""
+    if context is None:
+        return None
+    if not isinstance(context, dict):
+        raise ValueError("Export context must be a JSON object.")
+    result = {}
+    required = set(WorkLimits().to_dict())
+    for name in ("scan_limits", "filter_limits"):
+        if name in context:
+            value = context[name]
+            if not isinstance(value, dict) or set(value) != required:
+                raise ValueError(f"Invalid sharing context {name}.")
+            result[name] = WorkLimits(**value).to_dict()
+    return result
 
 
 def validate_output(source: Path, output: Path, *, source_was_file: bool = False) -> None:
@@ -35,7 +90,10 @@ def write_report(
     *,
     limits: WorkLimits | None = None,
     context: dict | None = None,
+    redacted: bool = False,
 ) -> Path:
+    if type(redacted) is not bool:
+        raise ValueError("redacted must be a boolean.")
     output = absolute_path(destination)
     sidecar = manifest_path(output)
     source = Path(report["input"])
@@ -82,14 +140,20 @@ def write_report(
                     source_was_file = True
                     break
             validate_pair(source_was_file=source_was_file)
+            export_report = report
+            if redacted:
+                from .privacy import redact_report
+
+                export_report = redact_report(report)
+                context = _sharing_context(context)
             digest = hashlib.sha256()
             size = 0
-            with closing(iter_render(report, format_name, limits=limits)) as chunks:
+            with closing(iter_render(export_report, format_name, limits=limits)) as chunks:
                 # Validate the format and first chunk before claiming a filename.
                 first = next(chunks)
                 validate_pair(source_was_file=source_was_file)
                 budget.check()
-                with output.open("x", encoding="utf-8", newline="") as stream:
+                with _open_private(output) as stream:
                     remember_created(output, stream)
 
                     def write_chunk(chunk: str) -> None:
@@ -112,7 +176,7 @@ def write_report(
                 budget.check()
             check_owned(output, size)
             manifest = build_manifest(
-                report,
+                export_report,
                 output,
                 format_name,
                 size,
@@ -123,7 +187,7 @@ def write_report(
             validate_output(source, sidecar, source_was_file=source_was_file)
             budget.check()
             manifest_size = 0
-            with sidecar.open("x", encoding="utf-8", newline="") as stream:
+            with _open_private(sidecar) as stream:
                 remember_created(sidecar, stream)
                 for chunk in iter_manifest(manifest):
                     budget.check()

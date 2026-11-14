@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import __version__
 from .analysis import FilterOptions, validate_filters
-from .limits import WorkLimitExceeded, WorkLimits
+from .limits import WorkLimitExceeded, WorkLimits, operation_budget
 from .output import validate_output as _validate_output
 from .output import write_report
 from .reports import render, safe_text
@@ -38,6 +38,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--format", choices=("table", "json", "csv", "html"), default="table")
     command.add_argument(
         "--output", type=Path, help="Create a NEW report outside the evidence directory"
+    )
+    command.add_argument(
+        "--redact", action="store_true", help="Export an explicitly redacted sharing derivative"
     )
     command.add_argument(
         "--timezone", default="UTC", help="Display timezone (default: UTC; e.g. Asia/Jakarta)"
@@ -141,10 +144,19 @@ def main(argv: list[str] | None = None) -> int:
                 args.format,
                 limits=limits,
                 context={"scan_limits": limits.to_dict(), "filter_limits": limits.to_dict()},
+                redacted=args.redact,
             )
             print(f"Report saved: {safe_text(output)} (SHA-256 manifest included)", file=sys.stderr)
         else:
-            sys.stdout.write(render(report, args.format, limits=limits))
+            if args.redact:
+                from .privacy import redact_report
+
+                with operation_budget(limits, operation="sharing export"):
+                    shared = redact_report(report)
+                    text = render(shared, args.format, limits=limits)
+                sys.stdout.write(text)
+            else:
+                sys.stdout.write(render(report, args.format, limits=limits))
         summary = report["summary"]
         if summary["errors"] or summary["skipped"]:
             return 1

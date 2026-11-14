@@ -1,4 +1,4 @@
-# Recycle Bin Forensics 1.6
+# Recycle Bin Forensics 1.7
 
 An offline desktop application and Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
@@ -20,6 +20,7 @@ An offline desktop application and Python command-line toolkit for examining mod
 - Produces an offline HTML report with browser search/sorting, plus JSON, CSV, and terminal output.
 - Keeps full scan records in JSON even when a filter selects a smaller view.
 - Pairs file exports with SHA-256 manifests and checks them with `rbf verify-export REPORT`.
+- Provides explicit redacted sharing derivatives and owner-only export file creation on POSIX.
 - Avoids evidence symlinks/reparse points and refuses to overwrite report files.
 - Includes a reproducible synthetic corpus, independent-parser validation, and scan/GUI benchmark tools.
 
@@ -203,7 +204,7 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-**Application version `1.6.1` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+**Application version `1.7.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
 
 Feature additions increment the minor version (`1.0.0` to `1.1.0`); compatible bug fixes increment the patch version (`1.1.0` to `1.1.1`). A compatibility-breaking application change increments the major version. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
@@ -217,7 +218,7 @@ rbf --version
 rbf-gui
 ```
 
-The version command should report `rbf 1.6.1`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
+The version command should report `rbf 1.7.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
 
 ## Development and validation
 

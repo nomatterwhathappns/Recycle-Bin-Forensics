@@ -169,16 +169,17 @@ def test_sidecar_creation_race_preserves_the_other_writer_and_cleans_report(
     destination = tmp_path / "report.json"
     manifest_path = sidecar(destination)
     original_open = Path.open
+    original_private = output._open_private
 
     @contextmanager
-    def race_open(path, *args, **kwargs):
-        if path == manifest_path and args and "x" in args[0]:
+    def race_open(path):
+        if path == manifest_path:
             with original_open(path, "w", encoding="utf-8") as competitor:
                 competitor.write("racing manifest")
-        with original_open(path, *args, **kwargs) as stream:
+        with original_private(path) as stream:
             yield stream
 
-    monkeypatch.setattr(Path, "open", race_open)
+    monkeypatch.setattr(output, "_open_private", race_open)
     with pytest.raises((EvidenceError, FileExistsError, ManifestError)):
         output.write_report(report, destination, "json")
     assert not destination.exists()
@@ -196,7 +197,7 @@ def test_failure_at_either_file_cleans_both_owned_paths(
     clock = [0.0]
     monkeypatch.setattr(limit_module, "monotonic", lambda: clock[0])
     control = ScanControl()
-    original_open = Path.open
+    original_private = output._open_private
     original_fsync = output.os.fsync
     descriptor_paths = {}
     triggered = []
@@ -226,8 +227,8 @@ def test_failure_at_either_file_cleans_both_owned_paths(
             return result
 
     @contextmanager
-    def track_open(path, *args, **kwargs):
-        with original_open(path, *args, **kwargs) as stream:
+    def track_open(path):
+        with original_private(path) as stream:
             descriptor_paths[stream.fileno()] = path
             yield TrackedStream(stream, path)
         trip(path, "close")
@@ -236,7 +237,7 @@ def test_failure_at_either_file_cleans_both_owned_paths(
         original_fsync(descriptor)
         trip(descriptor_paths[descriptor], "fsync")
 
-    monkeypatch.setattr(Path, "open", track_open)
+    monkeypatch.setattr(output, "_open_private", track_open)
     monkeypatch.setattr(output.os, "fsync", track_fsync)
     expected_failure = {
         "io": OSError,

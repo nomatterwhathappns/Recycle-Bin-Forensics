@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.0
+
+### Added
+
+- Explicit redacted sharing exports in CLI (`--redact`) and desktop export menus, with distinct schema/labels, consistent identifier aliases, and evidence hashes withheld.
+- Original analysis and selection remain intact; redacted JSON never acknowledges saving the complete forensic inventory.
+- Report and manifest files are created with owner-only mode 0600 on POSIX, including under a permissive umask. Windows uses the destination directory's inherited ACL.
+- Privacy regression coverage checks reports and manifests together for identifiers, diagnostic text, search criteria, and unknown future fields.
+
+### Changed
+
+- Application/package version is `1.7.0`; ordinary forensic JSON retains schema `2.0` and sharing derivatives use `sharing-1.0`.
+
+
 ## 1.6.1
 
 ### Fixed

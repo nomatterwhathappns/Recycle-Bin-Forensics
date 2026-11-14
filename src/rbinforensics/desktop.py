@@ -266,6 +266,7 @@ class DesktopSession:
         *,
         propagate: bool = False,
         limits: WorkLimits | None = None,
+        redacted: bool = False,
     ) -> Path | None:
         try:
             path = write_report(
@@ -277,6 +278,7 @@ class DesktopSession:
                     "scan_limits": self.scan_limits.to_dict(),
                     "filter_limits": self.view_limits.to_dict(),
                 },
+                redacted=redacted,
             )
         except Exception as exc:
             with self._lock:
@@ -296,7 +298,7 @@ class DesktopSession:
             return None
         with self._lock:
             if self._job_id == job_id:
-                if format_name == "json":
+                if format_name == "json" and not redacted:
                     self._saved_analysis_id = self._analysis_id
                 self.state = "complete"
                 self.error = None
@@ -304,7 +306,12 @@ class DesktopSession:
         return path
 
     def start_export(
-        self, destination: Path, format_name: str, *, limits: WorkLimits | None = None
+        self,
+        destination: Path,
+        format_name: str,
+        *,
+        limits: WorkLimits | None = None,
+        redacted: bool = False,
     ) -> None:
         """Render and write a complete selected report on a background thread."""
         with self._lock:
@@ -313,7 +320,10 @@ class DesktopSession:
                 Thread(
                     target=self._export_worker,
                     args=(job_id, report, Path(destination), format_name),
-                    kwargs={"limits": limits if limits is not None else self.scan_limits},
+                    kwargs={
+                        "limits": limits if limits is not None else self.scan_limits,
+                        "redacted": redacted,
+                    },
                     name="rbf-export",
                     daemon=True,
                 ),
@@ -322,7 +332,12 @@ class DesktopSession:
             )
 
     def export(
-        self, destination: Path, format_name: str, *, limits: WorkLimits | None = None
+        self,
+        destination: Path,
+        format_name: str,
+        *,
+        limits: WorkLimits | None = None,
+        redacted: bool = False,
     ) -> Path:
         """Synchronous export for non-GUI callers, with the same state guards."""
         with self._lock:
@@ -334,6 +349,7 @@ class DesktopSession:
             format_name,
             propagate=True,
             limits=limits if limits is not None else self.scan_limits,
+            redacted=redacted,
         )
         assert path is not None
         return path

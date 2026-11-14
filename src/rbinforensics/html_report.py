@@ -419,6 +419,12 @@ def _iter_html(report: dict) -> Iterator[str]:
         '<button id="print-report" class="button" type="button">Print report</button></div>'
         '<div class="summary-grid" aria-label="Complete scan summary">'
     )
+    if report.get("report_kind") == "redacted-sharing":
+        yield (
+            '<p role="note"><strong>REDACTED SHARING DERIVATIVE</strong> — '
+            "Identifiers and evidence hashes withheld; times and sizes retained. "
+            "Keep the original forensic JSON separately.</p>"
+        )
     for label, value, note in (
         ("Inventory records", len(records), "Complete supplied scan scope"),
         ("Metadata parsed", summary.get("parsed", 0), "Decoded $I artifacts"),

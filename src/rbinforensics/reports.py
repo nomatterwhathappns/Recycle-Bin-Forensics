@@ -74,7 +74,9 @@ def _issue_codes(record: dict) -> Iterator[str]:
 
 def _iter_csv(report: dict) -> Iterator[str]:
     output = io.StringIO(newline="")
-    writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
+    shared = report.get("report_kind") == "redacted-sharing"
+    fields = ("redacted_sharing_report_kind", *CSV_FIELDS) if shared else CSV_FIELDS
+    writer = csv.DictWriter(output, fieldnames=fields)
     writer.writeheader()
     yield output.getvalue()
     for record in _selected_records(report):
@@ -93,11 +95,15 @@ def _iter_csv(report: dict) -> Iterator[str]:
         row["payload_hash_status"] = payload.get("hash_status")
         row["issues"] = ";".join(_issue_codes(record))
         row["record_type"] = record["record_type"]
+        if shared:
+            row["redacted_sharing_report_kind"] = "redacted-sharing"
         writer.writerow({key: _csv_text(value) for key, value in row.items()})
         yield output.getvalue()
 
 
 def _iter_table(report: dict) -> Iterator[str]:
+    if report.get("report_kind") == "redacted-sharing":
+        yield "REDACTED SHARING DERIVATIVE — identifiers and evidence hashes withheld.\n"
     yield f"Recycle Bin Forensics {report['tool']['version']}\n"
     yield f"Input: {safe_text(report['input'])}\n"
     for record in _selected_records(report):

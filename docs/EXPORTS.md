@@ -19,3 +19,20 @@ Successful verification exits 0. A missing, invalid, oversized, or mismatched ma
 The report-size budget applies to report bytes. The manifest is bounded separately to 1 MiB. Both files must finish writing and syncing before export succeeds; failure cleans up files still owned by that operation. A desktop JSON save is acknowledged only after both succeed. Two files cannot be committed atomically as one filesystem object: interruption or power loss may leave an incomplete pair. A missing manifest is never treated as a verified export.
 
 SHA-256 checks byte integrity against a trusted manifest. It is not a digital signature: an actor able to replace both files can recompute the hash. Store trusted checksums and case records separately when authenticity or chain of custody matters. The manifest contains sensitive context like the report; apply the same access controls to both.
+
+## Private files and sharing derivatives
+
+On POSIX systems, every newly created report and manifest starts with mode `0600` (owner read/write), regardless of a permissive umask. The output directory must already exist; its permissions and storage policies remain the operator's responsibility. Windows inherits the destination directory's ACL; the application does not set or certify a private Windows ACL. Use an appropriately restricted case folder.
+
+Ordinary exports preserve identifiers. To create a separate sharing derivative:
+
+```sh
+rbf scan /cases/collected --recursive --format html --redact --output /reports/recycle-bin-sharing.html
+rbf verify-export /reports/recycle-bin-sharing.html
+```
+
+In the desktop, each **Ekspor** menu offers an ordinary report or **Salinan tersamarkan untuk dibagikan**. The latter replaces acquired/original paths, filenames, SID groups, and extension groups with consistent aliases; withholds case/examiner labels, identifying filter text, free-text diagnostics, and original evidence hashes; and omits unknown fields. The paired manifest uses only the derivative's context. Selected indexes and quantitative facts remain unchanged. Times, sizes, statuses, and diagnostic codes are retained for useful discussion. Aliases apply within one export; no reverse mapping is included.
+
+A sharing JSON uses `schema_version: "sharing-1.0"` and `report_kind: "redacted-sharing"`, rather than claiming forensic schema 2.0. CSV adds a `redacted_sharing_report_kind` column (also visible when there are no selected records); table and HTML include visible sharing labels. The original in-memory analysis is unchanged. A sharing JSON does not acknowledge saving the complete original analysis; **Simpan JSON** in the unsaved-analysis dialog always saves the ordinary full inventory.
+
+This is identifier reduction, not guaranteed anonymity. Review retained times/sizes and the chosen destination filename before sharing. The manifest intentionally records that filename. Do not put a person's name or case identifier in it. Export a complete ordinary JSON privately before using a derivative for a portfolio example or technical discussion.

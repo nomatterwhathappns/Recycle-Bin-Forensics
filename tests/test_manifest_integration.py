@@ -219,14 +219,14 @@ def test_cli_sidecar_failure_does_not_announce_or_retain_an_unpaired_report(
 ) -> None:
     target = evidence.parent / "failed-pair.json"
     sidecar = _sidecar(target)
-    original_open = Path.open
+    original_private = output._open_private
 
-    def fail_manifest_open(path, mode="r", *args, **kwargs):
-        if path == sidecar and mode.startswith("x"):
+    def fail_manifest_open(path):
+        if path == sidecar:
             raise PermissionError("Manifest creation denied")
-        return original_open(path, mode, *args, **kwargs)
+        return original_private(path)
 
-    monkeypatch.setattr(Path, "open", fail_manifest_open)
+    monkeypatch.setattr(output, "_open_private", fail_manifest_open)
     assert cli.main(["scan", str(evidence), "--format", "json", "--output", str(target)]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -266,14 +266,14 @@ def test_desktop_sidecar_failure_preserves_inventory_view_and_saved_status(
         session.export(evidence.parent / "earlier.json", "json")
     target = evidence.parent / "failed-pair.json"
     sidecar = _sidecar(target)
-    original_open = Path.open
+    original_private = output._open_private
     original_sync = output.os.fsync
     syncs = []
 
-    def fail_manifest_open(path, mode="r", *args, **kwargs):
-        if path == sidecar and mode.startswith("x"):
+    def fail_manifest_open(path):
+        if path == sidecar:
             raise PermissionError("Manifest creation denied")
-        return original_open(path, mode, *args, **kwargs)
+        return original_private(path)
 
     def fail_manifest_sync(descriptor):
         syncs.append(descriptor)
@@ -282,7 +282,7 @@ def test_desktop_sidecar_failure_preserves_inventory_view_and_saved_status(
         return original_sync(descriptor)
 
     if failure == "create":
-        monkeypatch.setattr(Path, "open", fail_manifest_open)
+        monkeypatch.setattr(output, "_open_private", fail_manifest_open)
     else:
         monkeypatch.setattr(output.os, "fsync", fail_manifest_sync)
     if asynchronous:
@@ -311,15 +311,15 @@ def test_desktop_json_acknowledges_save_only_after_manifest_worker_finishes(
     target = evidence.parent / "complete-pair.json"
     sidecar = _sidecar(target)
     entered, release = Event(), Event()
-    original_open = Path.open
+    original_private = output._open_private
 
-    def pause_manifest_open(path, mode="r", *args, **kwargs):
-        if path == sidecar and mode.startswith("x"):
+    def pause_manifest_open(path):
+        if path == sidecar:
             entered.set()
             assert release.wait(5), "Manifest worker was not released"
-        return original_open(path, mode, *args, **kwargs)
+        return original_private(path)
 
-    monkeypatch.setattr(Path, "open", pause_manifest_open)
+    monkeypatch.setattr(output, "_open_private", pause_manifest_open)
     session.start_export(target, "json")
     try:
         assert entered.wait(2), "Export did not reach manifest creation"

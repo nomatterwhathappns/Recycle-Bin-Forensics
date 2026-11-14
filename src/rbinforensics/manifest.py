@@ -90,6 +90,8 @@ def build_manifest(
         if not isinstance(context, dict):
             raise ManifestError("Manifest context must be a JSON object.")
         result["context"] = context
+    if report.get("report_kind") == "redacted-sharing":
+        result["report_kind"] = "redacted-sharing"
     validate_manifest(result, report_path)
     return result
 
@@ -177,7 +179,10 @@ def _utc(value: object, label: str, *, nullable: bool = False) -> None:
 
 def validate_manifest(manifest: object, report_path: Path) -> dict:
     """Validate version 1 before a verifier opens the explicitly supplied report."""
-    if not isinstance(manifest, dict) or not _REQUIRED <= set(manifest) <= _REQUIRED | {"context"}:
+    if not isinstance(manifest, dict) or not _REQUIRED <= set(manifest) <= _REQUIRED | {
+        "context",
+        "report_kind",
+    }:
         raise ManifestError("Invalid manifest fields.")
     if manifest["manifest_schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise ManifestError("Unsupported manifest schema version.")
@@ -205,6 +210,14 @@ def validate_manifest(manifest: object, report_path: Path) -> dict:
     ):
         raise ManifestError("Invalid manifest SHA-256 digest.")
     _string(manifest["forensic_schema_version"], "forensic schema version")
+    if "report_kind" in manifest:
+        if (
+            manifest["report_kind"] != "redacted-sharing"
+            or manifest["forensic_schema_version"] != "sharing-1.0"
+        ):
+            raise ManifestError("Invalid manifest sharing report kind or schema.")
+    elif manifest["forensic_schema_version"] == "sharing-1.0":
+        raise ManifestError("Sharing manifests must identify their redacted report kind.")
     inventory = _object(manifest["inventory"], {"total_records", "selected_records"}, "inventory")
     if any(type(value) is not int or value < 0 for value in inventory.values()):
         raise ManifestError("Invalid manifest inventory counts.")

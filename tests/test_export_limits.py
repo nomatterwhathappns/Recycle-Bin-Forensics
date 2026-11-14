@@ -135,7 +135,7 @@ def test_failed_size_limited_export_removes_its_partial_file(
 ) -> None:
     size = len(render(report, format_name).encode("utf-8"))
     destination = tmp_path / ("report." + format_name)
-    original_open = Path.open
+    original_private = output._open_private
     written = []
 
     class TrackedStream:
@@ -151,11 +151,11 @@ def test_failed_size_limited_export_removes_its_partial_file(
             return result
 
     @contextmanager
-    def track_open(path, *args, **kwargs):
-        with original_open(path, *args, **kwargs) as stream:
+    def track_open(path):
+        with original_private(path) as stream:
             yield TrackedStream(stream) if path == destination else stream
 
-    monkeypatch.setattr(Path, "open", track_open)
+    monkeypatch.setattr(output, "_open_private", track_open)
     with pytest.raises(WorkLimitExceeded, match="max_export_bytes") as failure:
         output.write_report(
             report, destination, format_name, limits=WorkLimits(max_export_bytes=size - 1)
@@ -211,6 +211,7 @@ def test_deadline_failure_cleans_only_the_created_file(
     monkeypatch.setattr(limit_module, "monotonic", lambda: clock[0])
     destination = tmp_path / "report.json"
     original_open = Path.open
+    original_private = output._open_private
     wrote = []
 
     class SlowStream:
@@ -231,11 +232,11 @@ def test_deadline_failure_cleans_only_the_created_file(
             return result
 
     @contextmanager
-    def slow_open(path, *args, **kwargs):
-        with original_open(path, *args, **kwargs) as stream:
+    def slow_open(path):
+        with original_private(path) as stream:
             yield SlowStream(stream) if path == destination else stream
 
-    monkeypatch.setattr(Path, "open", slow_open)
+    monkeypatch.setattr(output, "_open_private", slow_open)
     with pytest.raises(WorkLimitExceeded, match="max_operation_seconds") as failure:
         output.write_report(report, destination, "json", limits=WorkLimits(max_operation_seconds=1))
     assert failure.value.operation == "export"
@@ -262,16 +263,16 @@ def test_deadline_during_finalization_does_not_leave_a_successful_export(
 
         monkeypatch.setattr(output.os, "fsync", expire_after_fsync)
     else:
-        original_open = Path.open
+        original_private = output._open_private
 
         @contextmanager
-        def expire_after_close(path, *args, **kwargs):
-            with original_open(path, *args, **kwargs) as stream:
+        def expire_after_close(path):
+            with original_private(path) as stream:
                 yield stream
             if path == destination:
                 clock[0] = 2.0
 
-        monkeypatch.setattr(Path, "open", expire_after_close)
+        monkeypatch.setattr(output, "_open_private", expire_after_close)
     with pytest.raises(WorkLimitExceeded, match="max_operation_seconds"):
         output.write_report(report, destination, "json", limits=WorkLimits(max_operation_seconds=1))
     assert not destination.exists()
