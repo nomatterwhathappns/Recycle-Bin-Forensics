@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.5.1**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.5.1` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.6.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.6.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
@@ -635,3 +635,11 @@ Dialog sebelum scan berikutnya atau penutupan menyediakan Simpan JSON, Buang has
 Batas menghitung pekerjaan yang benar-benar dilakukan: entri direktori sebelum ditampung, record metadata/orphan/diagnostik tanpa menghitung pasangan payload dua kali, byte metadata dan hash, serta byte UTF-8 yang akan ditulis. Deadline diperiksa berkala sehingga pembacaan OS yang sedang terblokir tetap perlu kembali lebih dulu. Batas ini mengendalikan workload dan tidak menyatakan plafon RAM yang identik di semua mesin.
 
 Exception batas operasi dipisahkan dari error artefak per-file. Karena itu scanner tidak bisa menangkap kehabisan budget sebagai satu record rusak lalu menyatakan keseluruhan scan selesai. Filter/ekspor yang gagal menjaga hasil lengkap sebelumnya. JSON/CSV/HTML/text ditulis bertahap, dan file parsial yang benar-benar dimiliki writer dibersihkan ketika terjadi kegagalan.
+
+## 32. Manifest dan pemeriksaan integritas ekspor
+
+`output.write_report()` menulis laporan sambil menghitung SHA-256 byte UTF-8 yang benar-benar ditulis. Setelah laporan selesai, manifest merekam hash, ukuran, format, versi aplikasi, konteks kasus, pilihan filter, zona waktu, dan batas operasi. Kedua nama file harus baru dan di luar direktori bukti. Jika salah satu tahap gagal, pembersihan hanya boleh menghapus file milik operasi tersebut.
+
+`manifest.verify_export()` memeriksa kontrak manifest, ukuran, dan hash laporan yang dipilih pengguna. Perintah `rbf verify-export laporan.json` berguna setelah menyalin atau mengarsipkan laporan. Hash mendeteksi perubahan dibanding manifest yang dipercaya; orang yang bisa mengganti laporan sekaligus manifest dapat menghitung hash baru. Karena itu hasil verifikasi tidak membuktikan identitas pemeriksa, kebenaran bukti, atau chain of custody.
+
+JSON lengkap tetap schema `2.0`; manifest memiliki kontrak terpisah `1.0`. JSON baru dianggap tersimpan oleh `DesktopSession` setelah laporan dan manifest sama-sama berhasil ditulis.

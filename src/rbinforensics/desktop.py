@@ -273,6 +273,10 @@ class DesktopSession:
                 destination,
                 format_name,
                 limits=limits if limits is not None else self.scan_limits,
+                context={
+                    "scan_limits": self.scan_limits.to_dict(),
+                    "filter_limits": self.view_limits.to_dict(),
+                },
             )
         except Exception as exc:
             with self._lock:

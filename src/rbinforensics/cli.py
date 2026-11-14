@@ -24,6 +24,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("gui", help="Open the local desktop application")
+    verification = commands.add_parser(
+        "verify-export", help="Verify a saved report against its SHA-256 manifest"
+    )
+    verification.add_argument("report", type=Path, help="Report file with a sibling manifest")
     command = commands.add_parser(
         "scan", help="Analyze a $I file or a folder of collected artifacts"
     )
@@ -90,6 +94,22 @@ def main(argv: list[str] | None = None) -> int:
         from .gui import main as gui_main
 
         return gui_main([])
+    if args.command == "verify-export":
+        from .manifest import verify_export
+
+        try:
+            manifest = verify_export(args.report)
+            print(f"Verified SHA-256: {manifest['report']['sha256']}")
+            return 0
+        except WorkLimitExceeded as exc:
+            print(f"rbf: verification incomplete: {safe_text(exc)}", file=sys.stderr)
+            return 3
+        except (OSError, ValueError, EvidenceError) as exc:
+            print(f"rbf: verification failed: {safe_text(exc)}", file=sys.stderr)
+            return 2
+        except KeyboardInterrupt:
+            print("rbf: interrupted; verification incomplete.", file=sys.stderr)
+            return 130
     source = absolute_path(args.input)
     output = absolute_path(args.output) if args.output else None
     try:
@@ -115,8 +135,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         report = scan(source, options, filters)
         if output:
-            write_report(report, output, args.format, limits=limits)
-            print(f"Report saved: {safe_text(output)}", file=sys.stderr)
+            write_report(
+                report,
+                output,
+                args.format,
+                limits=limits,
+                context={"scan_limits": limits.to_dict(), "filter_limits": limits.to_dict()},
+            )
+            print(f"Report saved: {safe_text(output)} (SHA-256 manifest included)", file=sys.stderr)
         else:
             sys.stdout.write(render(report, args.format, limits=limits))
         summary = report["summary"]

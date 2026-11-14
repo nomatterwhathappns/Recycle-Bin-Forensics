@@ -1260,3 +1260,37 @@ def test_pagination_and_each_tree_keep_details_bound_to_current_row(app, tmp_pat
         tree.event_generate("<<TreeviewSelect>>")
         app.update()
         assert expected in app.detail_panel.get_text()
+
+
+def test_manifest_collision_during_guarded_save_keeps_analysis_open(
+    app, evidence, tmp_path, monkeypatch
+):
+    from rbinforensics import gui
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    target = tmp_path.resolve() / "guarded.json"
+    manifest = target.with_name(target.name + ".manifest.json")
+    manifest.write_text("existing receipt", encoding="utf-8")
+    _guard_choice(app, monkeypatch, "save")
+    monkeypatch.setattr(gui.filedialog, "asksaveasfilename", lambda **_: str(target))
+    app._on_close()
+    _pump(app, lambda: bool(app._test_dialogs) and not app._worker_running())
+    assert not app._test_destroyed.is_set()
+    assert app.session.report is baseline
+    assert app.session.has_unsaved_report
+    assert app._deferred_action is None
+    assert not target.exists()
+    assert manifest.read_text("utf-8") == "existing receipt"
+
+
+def test_gui_success_means_report_and_manifest_are_verifiable(app, evidence, tmp_path):
+    from rbinforensics.manifest import verify_export
+
+    _scan(app, evidence)
+    target = tmp_path.resolve() / "with-receipt.json"
+    assert app.export_report("json", target)
+    _pump(app, lambda: app._last_export == target and not app._worker_running())
+    assert not app.session.has_unsaved_report
+    assert verify_export(target)["report"]["format"] == "json"
+    assert "manifest SHA-256" in app.status_var.get()

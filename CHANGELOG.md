@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0
+
+### Added
+
+- Every file export now includes a sibling SHA-256 manifest with exact report size, format, tool version, case and selection context, and operation limits.
+- `rbf verify-export REPORT` validates a report against its manifest without opening paths listed as evidence.
+- Paired export rollback preserves pre-existing files and removes files owned by a failed operation. A JSON save is acknowledged only after both files succeed.
+
+### Changed
+
+- Application/package version is `1.6.0`; complete forensic JSON remains schema `2.0`, with a separate manifest contract `1.0`.
+
+
 ## 1.5.1
 
 ### Fixed

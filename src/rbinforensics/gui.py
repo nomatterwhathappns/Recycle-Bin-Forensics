@@ -1324,7 +1324,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 self.export_status_var.set(
                     "Tersimpan: " + (filename if len(filename) <= 120 else filename[:117] + "…")
                 )
-                self.status_var.set("Laporan berhasil disimpan.")
+                self.status_var.set("Laporan dan manifest SHA-256 berhasil disimpan.")
         if latest is not None and self.session.state == "scanning":
             self._update_progress(latest)
         if self._closing and not self._worker_running() and not self._awaiting_terminal:
