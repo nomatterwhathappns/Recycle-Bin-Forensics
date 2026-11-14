@@ -84,8 +84,9 @@ def test_budget_rejects_invalid_limit_objects_instead_of_silently_using_defaults
 
 def test_record_reservations_are_idempotent_and_reject_before_growth() -> None:
     budget = OperationBudget(WorkLimits(max_records=2), operation="scan")
-    budget.reserve_record("metadata", Path("case/$Ione"))
-    budget.reserve_record("metadata", "case/$Ione")
+    source = Path("case/$Ione")
+    budget.reserve_record("metadata", source)
+    budget.reserve_record("metadata", str(source))
     budget.reserve_record("orphan_payload", "case/$Rtwo")
     with pytest.raises(WorkLimitExceeded) as stopped:
         budget.reserve_record("discovery", "case/unreadable")

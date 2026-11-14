@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+
+### Fixed
+
+- Make the record-reservation regression test use native path separators on Windows as well as POSIX. Runtime behavior and forensic schema are unchanged.
+
 ## 1.5.0
 
 ### Added

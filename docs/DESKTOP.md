@@ -1,6 +1,6 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.5.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.5.1 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
@@ -50,7 +50,7 @@ rbf --version
 rbf-gui
 ```
 
-The expected version is `rbf 1.5.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
+The expected version is `rbf 1.5.1`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 
