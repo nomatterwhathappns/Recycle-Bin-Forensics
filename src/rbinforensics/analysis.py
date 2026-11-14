@@ -13,6 +13,8 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
+from .limits import WorkLimits, check_budget, current_budget, operation_budget
+
 _EPOCH = datetime(1601, 1, 1)
 _TICKS_PER_SECOND = 10_000_000
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -85,6 +87,7 @@ def _normalized(filters: FilterOptions) -> dict:
     values = asdict(filters)
     normalized = []
     for extension in filters.extensions:
+        check_budget()
         text = extension.strip().casefold()
         if not text.startswith("."):
             text = "." + text
@@ -156,82 +159,125 @@ def _matches(record: dict, values: dict, after: int | None, before: int | None) 
     return True
 
 
-def apply_filters(report: dict, filters: FilterOptions) -> dict:
-    """Return a deep-copied report with an explicit selection over all records."""
-    validate_filters(filters)
-    values = _normalized(filters)
-    after = _instant_ticks(filters.deleted_after) if filters.deleted_after is not None else None
-    before = _instant_ticks(filters.deleted_before) if filters.deleted_before is not None else None
-    indexes = [
-        index
-        for index, record in enumerate(report["records"])
-        if _matches(record, values, after, before)
-    ]
-    result = copy.deepcopy(report)
-    result["selection"] = {
-        "filters": values,
-        "active": any(value is not None and value != [] for value in values.values()),
-        "matched": len(indexes),
-        "excluded": len(report["records"]) - len(indexes),
-        "record_indexes": indexes,
-    }
-    return result
+def apply_filters(
+    report: dict, filters: FilterOptions, *, limits: WorkLimits | None = None
+) -> dict:
+    """Return an isolated inventory with a new selection and no stale timeline.
+
+    Copy records individually so cancellation and deadlines remain observable.
+    Callers rebuild the timeline from this selection before publishing the view.
+    """
+    with operation_budget(limits, operation="filter", reuse=True) as budget:
+        records = report["records"]
+        budget.check_record_count(len(records))
+        validate_filters(filters)
+        values = _normalized(filters)
+        after = _instant_ticks(filters.deleted_after) if filters.deleted_after is not None else None
+        before = (
+            _instant_ticks(filters.deleted_before) if filters.deleted_before is not None else None
+        )
+        indexes = []
+        copied_records = []
+        for index, record in enumerate(records):
+            budget.check()
+            if _matches(record, values, after, before):
+                indexes.append(index)
+            copied_records.append(copy.deepcopy(record))
+            budget.check()
+        result = {}
+        for key, value in report.items():
+            budget.check()
+            if key not in ("records", "selection", "timeline"):
+                result[key] = copy.deepcopy(value)
+        result["records"] = copied_records
+        result["selection"] = {
+            "filters": values,
+            "active": any(value is not None and value != [] for value in values.values()),
+            "matched": len(indexes),
+            "excluded": len(records) - len(indexes),
+            "record_indexes": indexes,
+        }
+        return result
 
 
 def selected_records(report: dict) -> list[dict]:
     """Return the records in a report's selection, or all records without one."""
+    budget = current_budget()
+    if budget is not None:
+        budget.check_record_count(len(report["records"]))
     if "selection" not in report:
         return report["records"]
-    return [report["records"][index] for index in report["selection"]["record_indexes"]]
+    indexes = report["selection"]["record_indexes"]
+    if budget is not None:
+        budget.check_record_count(len(indexes))
+    selected = []
+    for index in indexes:
+        check_budget()
+        selected.append(report["records"][index])
+    check_budget()
+    return selected
 
 
-def build_timeline(records: list[dict]) -> dict:
+def build_timeline(records: list[dict], *, limits: WorkLimits | None = None) -> dict:
     """Build an ascending deletion timeline from dated metadata observations.
 
     Undated, failed, orphan and discovery records are counted separately; no
     filesystem modification/creation timestamp substitutes for deletion time.
     Aggregates describe only the dated events included in this timeline.
     """
-    events = []
-    extensions: Counter[str] = Counter()
-    for record in records:
-        metadata = record.get("metadata")
-        if not metadata or not metadata.get("deleted_at_utc"):
-            continue
-        try:
-            _instant_ticks(metadata["deleted_at_utc"])
-        except (TypeError, ValueError):
-            continue
-        payload = record.get("payload") or {}
-        events.append(
-            {
-                "source_path": record["source_path"],
-                "sid": record.get("sid"),
-                "original_path": metadata["original_path"],
-                "original_size": metadata["original_size"],
-                "deletion_filetime": metadata["deletion_filetime"],
-                "deleted_at_utc": metadata["deleted_at_utc"],
-                "deleted_at_display": metadata.get("deleted_at_display"),
-                "payload_status": payload.get("status"),
-            }
-        )
-        extensions[ntpath.splitext(metadata["original_path"])[1].casefold()] += 1
-    events.sort(key=lambda event: (event["deletion_filetime"], event["source_path"]))
-    days = Counter(event["deleted_at_utc"][:10] for event in events)
-    sids = Counter(event["sid"] for event in events)
-    return {
-        "order": "deletion_time_ascending",
-        "events": events,
-        "undated_records": len(records) - len(events),
-        "daily_counts": [
-            {"date_utc": date, "count": count} for date, count in sorted(days.items())
-        ],
-        "by_sid": [
-            {"sid": sid, "count": count}
-            for sid, count in sorted(sids.items(), key=lambda item: item[0] or "")
-        ],
-        "by_extension": [
-            {"extension": extension, "count": count}
-            for extension, count in sorted(extensions.items())
-        ],
-    }
+    with operation_budget(limits, operation="timeline", reuse=True) as budget:
+        budget.check_record_count(len(records))
+        events = []
+        extensions: Counter[str] = Counter()
+        days: Counter[str] = Counter()
+        sids: Counter[str | None] = Counter()
+        for record in records:
+            budget.check()
+            metadata = record.get("metadata")
+            if not metadata or not metadata.get("deleted_at_utc"):
+                continue
+            try:
+                _instant_ticks(metadata["deleted_at_utc"])
+            except (TypeError, ValueError):
+                continue
+            payload = record.get("payload") or {}
+            events.append(
+                {
+                    "source_path": record["source_path"],
+                    "sid": record.get("sid"),
+                    "original_path": metadata["original_path"],
+                    "original_size": metadata["original_size"],
+                    "deletion_filetime": metadata["deletion_filetime"],
+                    "deleted_at_utc": metadata["deleted_at_utc"],
+                    "deleted_at_display": metadata.get("deleted_at_display"),
+                    "payload_status": payload.get("status"),
+                }
+            )
+            extensions[ntpath.splitext(metadata["original_path"])[1].casefold()] += 1
+            days[metadata["deleted_at_utc"][:10]] += 1
+            sids[record.get("sid")] += 1
+        budget.check()
+        events.sort(key=lambda event: (event["deletion_filetime"], event["source_path"]))
+        budget.check()
+        daily_counts = []
+        for date, count in sorted(days.items()):
+            budget.check()
+            daily_counts.append({"date_utc": date, "count": count})
+        budget.check()
+        by_sid = []
+        for sid, count in sorted(sids.items(), key=lambda item: item[0] or ""):
+            budget.check()
+            by_sid.append({"sid": sid, "count": count})
+        budget.check()
+        by_extension = []
+        for extension, count in sorted(extensions.items()):
+            budget.check()
+            by_extension.append({"extension": extension, "count": count})
+        return {
+            "order": "deletion_time_ascending",
+            "events": events,
+            "undated_records": len(records) - len(events),
+            "daily_counts": daily_counts,
+            "by_sid": by_sid,
+            "by_extension": by_extension,
+        }

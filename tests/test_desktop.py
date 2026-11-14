@@ -276,7 +276,7 @@ def test_background_export_does_not_block_and_guards_view(
     release = Event()
     target = evidence.parent / "export.json"
 
-    def blocked_write(report, destination, format_name):
+    def blocked_write(report, destination, format_name, **kwargs):
         entered.set()
         assert release.wait(5)
         return destination
@@ -661,10 +661,10 @@ def test_json_save_marks_only_the_analysis_whose_export_finished(
     write = desktop.write_report
     target = evidence.parent / "first-audit.json"
 
-    def blocked_write(report, destination, format_name):
+    def blocked_write(report, destination, format_name, **kwargs):
         entered.set()
         assert release.wait(5)
-        return write(report, destination, format_name)
+        return write(report, destination, format_name, **kwargs)
 
     monkeypatch.setattr(desktop, "write_report", blocked_write)
     session.start_export(target, "json")

@@ -13,6 +13,7 @@ from threading import Lock, Thread
 from time import monotonic
 
 from .analysis import FilterOptions, apply_filters, build_timeline, selected_records
+from .limits import WorkLimitExceeded, WorkLimits, operation_budget
 from .output import write_report
 from .reports import safe_text
 from .scan_control import ScanCancelled, ScanControl, ScanProgress
@@ -41,6 +42,8 @@ class DesktopSession:
         self._last_progress_at: float | None = None
         self._analysis_id = 0
         self._saved_analysis_id: int | None = None
+        self.scan_limits = WorkLimits()
+        self.view_limits = self.scan_limits
 
     @property
     def has_unsaved_report(self) -> bool:
@@ -103,6 +106,8 @@ class DesktopSession:
             job_id = self._job_id
             self._analysis_id += 1
             self._saved_analysis_id = None
+            self.scan_limits = options.limits if options.limits is not None else WorkLimits()
+            self.view_limits = self.scan_limits
             self.report = None
             self.view = None
             self.error = None
@@ -137,6 +142,15 @@ class DesktopSession:
                 self.state = "complete"
                 self._control = None
                 self.events.put(("complete", result))
+        except WorkLimitExceeded as exc:
+            with self._lock:
+                if self._job_id == job_id:
+                    self.report = None
+                    self.view = None
+                    self.state = "limited"
+                    self.error = str(exc)
+                    self._control = None
+                    self.events.put(("limited", self.error))
         except ScanCancelled:
             with self._lock:
                 if self._job_id == job_id:
@@ -164,18 +178,21 @@ class DesktopSession:
             self._control.cancel()
             return True
 
-    def apply_view(self, filters: FilterOptions) -> dict:
+    def apply_view(self, filters: FilterOptions, *, limits: WorkLimits | None = None) -> dict:
         """Select from the full baseline, never from a previously filtered view."""
         with self._lock:
             self._require_complete()
             assert self.report is not None
-            result = apply_filters(self.report, filters)
-            result["timeline"] = build_timeline(selected_records(result))
+            selected_limits = limits if limits is not None else self.scan_limits
+            with operation_budget(selected_limits, operation="filter"):
+                result = apply_filters(self.report, filters)
+                result["timeline"] = build_timeline(selected_records(result))
             self.view = result
+            self.view_limits = selected_limits
             self.error = None
             return result
 
-    def start_filter(self, filters: FilterOptions) -> None:
+    def start_filter(self, filters: FilterOptions, *, limits: WorkLimits | None = None) -> None:
         """Compute a potentially large selected view without blocking the UI."""
         with self._lock:
             self._require_complete()
@@ -187,7 +204,12 @@ class DesktopSession:
             self._launch_worker(
                 Thread(
                     target=self._filter_worker,
-                    args=(self._job_id, self.report, filters),
+                    args=(
+                        self._job_id,
+                        self.report,
+                        filters,
+                        limits if limits is not None else self.scan_limits,
+                    ),
                     name="rbf-filter",
                     daemon=True,
                 ),
@@ -195,20 +217,31 @@ class DesktopSession:
                 "filter_error",
             )
 
-    def _filter_worker(self, job_id: int, report: dict, filters: FilterOptions) -> None:
+    def _filter_worker(
+        self, job_id: int, report: dict, filters: FilterOptions, limits: WorkLimits
+    ) -> None:
         try:
-            result = apply_filters(report, filters)
-            result["timeline"] = build_timeline(selected_records(result))
+            with operation_budget(limits, operation="filter"):
+                result = apply_filters(report, filters)
+                result["timeline"] = build_timeline(selected_records(result))
         except Exception as exc:
             with self._lock:
                 if self._job_id == job_id:
                     self.state = "complete"
                     self.error = safe_text(exc)
-                    self.events.put(("filter_error", self.error))
+                    self.events.put(
+                        (
+                            "filter_limited"
+                            if isinstance(exc, WorkLimitExceeded)
+                            else "filter_error",
+                            self.error,
+                        )
+                    )
             return
         with self._lock:
             if self._job_id == job_id:
                 self.view = result
+                self.view_limits = limits
                 self.state = "complete"
                 self.error = None
                 self.events.put(("filtered", result))
@@ -232,15 +265,28 @@ class DesktopSession:
         format_name: str,
         *,
         propagate: bool = False,
+        limits: WorkLimits | None = None,
     ) -> Path | None:
         try:
-            path = write_report(report, destination, format_name)
+            path = write_report(
+                report,
+                destination,
+                format_name,
+                limits=limits if limits is not None else self.scan_limits,
+            )
         except Exception as exc:
             with self._lock:
                 if self._job_id == job_id:
                     self.state = "complete"
                     self.error = safe_text(exc)
-                    self.events.put(("export_error", self.error))
+                    self.events.put(
+                        (
+                            "export_limited"
+                            if isinstance(exc, WorkLimitExceeded)
+                            else "export_error",
+                            self.error,
+                        )
+                    )
             if propagate:
                 raise
             return None
@@ -253,7 +299,9 @@ class DesktopSession:
                 self.events.put(("exported", path))
         return path
 
-    def start_export(self, destination: Path, format_name: str) -> None:
+    def start_export(
+        self, destination: Path, format_name: str, *, limits: WorkLimits | None = None
+    ) -> None:
         """Render and write a complete selected report on a background thread."""
         with self._lock:
             job_id, report = self._prepare_export()
@@ -261,6 +309,7 @@ class DesktopSession:
                 Thread(
                     target=self._export_worker,
                     args=(job_id, report, Path(destination), format_name),
+                    kwargs={"limits": limits if limits is not None else self.scan_limits},
                     name="rbf-export",
                     daemon=True,
                 ),
@@ -268,10 +317,19 @@ class DesktopSession:
                 "export_error",
             )
 
-    def export(self, destination: Path, format_name: str) -> Path:
+    def export(
+        self, destination: Path, format_name: str, *, limits: WorkLimits | None = None
+    ) -> Path:
         """Synchronous export for non-GUI callers, with the same state guards."""
         with self._lock:
             job_id, report = self._prepare_export()
-        path = self._export_worker(job_id, report, Path(destination), format_name, propagate=True)
+        path = self._export_worker(
+            job_id,
+            report,
+            Path(destination),
+            format_name,
+            propagate=True,
+            limits=limits if limits is not None else self.scan_limits,
+        )
         assert path is not None
         return path

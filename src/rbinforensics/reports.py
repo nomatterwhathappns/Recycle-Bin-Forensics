@@ -6,16 +6,23 @@ import csv
 import io
 import json
 import unicodedata
+from collections.abc import Iterator
 
-from .analysis import selected_records
+from .limits import WorkLimits, check_budget, operation_budget
 
 
 def safe_text(value: object) -> str:
     text = str(value)
-    return "".join(
-        f"\\u{ord(char):04x}" if unicodedata.category(char).startswith("C") else char
-        for char in text
-    )
+    parts = []
+    for offset in range(0, len(text), 4096):
+        check_budget()
+        parts.append(
+            "".join(
+                f"\\u{ord(char):04x}" if unicodedata.category(char).startswith("C") else char
+                for char in text[offset : offset + 4096]
+            )
+        )
+    return "".join(parts)
 
 
 def _csv_text(value: object) -> object:
@@ -51,11 +58,28 @@ CSV_FIELDS = (
 )
 
 
-def render_csv(report: dict) -> str:
+def _selected_records(report: dict) -> Iterator[dict]:
+    records = report["records"]
+    selection = report.get("selection") or {}
+    for index in selection.get("record_indexes", range(len(records))):
+        check_budget()
+        yield records[index]
+
+
+def _issue_codes(record: dict) -> Iterator[str]:
+    for issue in record["issues"]:
+        check_budget()
+        yield issue["code"]
+
+
+def _iter_csv(report: dict) -> Iterator[str]:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
     writer.writeheader()
-    for record in selected_records(report):
+    yield output.getvalue()
+    for record in _selected_records(report):
+        output.seek(0)
+        output.truncate()
         metadata = record["metadata"] or {}
         payload = record["payload"] or {}
         row = {
@@ -67,72 +91,94 @@ def render_csv(report: dict) -> str:
             {"payload_" + key: payload.get(key) for key in ("status", "path", "size", "sha256")}
         )
         row["payload_hash_status"] = payload.get("hash_status")
-        row["issues"] = ";".join(issue["code"] for issue in record["issues"])
+        row["issues"] = ";".join(_issue_codes(record))
         row["record_type"] = record["record_type"]
         writer.writerow({key: _csv_text(value) for key, value in row.items()})
-    return output.getvalue()
+        yield output.getvalue()
 
 
-def render_table(report: dict) -> str:
-    lines = [
-        f"Recycle Bin Forensics {report['tool']['version']}",
-        f"Input: {safe_text(report['input'])}",
-    ]
-    for record in selected_records(report):
-        lines.extend(("", f"[{record['status'].upper()}] {safe_text(record['source_path'])}"))
-        lines.append(f"  Record type   : {record['record_type']}")
+def _iter_table(report: dict) -> Iterator[str]:
+    yield f"Recycle Bin Forensics {report['tool']['version']}\n"
+    yield f"Input: {safe_text(report['input'])}\n"
+    for record in _selected_records(report):
+        yield f"\n[{record['status'].upper()}] {safe_text(record['source_path'])}\n"
+        yield f"  Record type   : {record['record_type']}\n"
         if record["metadata"]:
             metadata = record["metadata"]
-            lines.extend(
-                (
-                    f"  Original path : {safe_text(metadata['original_path'])}",
-                    f"  Original size : {metadata['original_size']} bytes",
-                    f"  Deleted (UTC) : {metadata['deleted_at_utc'] or 'unknown'}",
-                    f"  Display time  : {metadata['deleted_at_display'] or 'unknown'} ({safe_text(report['options']['timezone'])})",
-                    f"  Format        : v{metadata['format_version']}",
-                    f"  Payload       : {record['payload']['status']}",
-                )
-            )
+            yield f"  Original path : {safe_text(metadata['original_path'])}\n"
+            yield f"  Original size : {metadata['original_size']} bytes\n"
+            yield f"  Deleted (UTC) : {metadata['deleted_at_utc'] or 'unknown'}\n"
+            yield f"  Display time  : {metadata['deleted_at_display'] or 'unknown'} ({safe_text(report['options']['timezone'])})\n"
+            yield f"  Format        : v{metadata['format_version']}\n"
+            yield f"  Payload       : {record['payload']['status']}\n"
             if record["payload"]["sha256"]:
-                lines.append(f"  Payload SHA256: {record['payload']['sha256']}")
+                yield f"  Payload SHA256: {record['payload']['sha256']}\n"
         if record["source_sha256"]:
-            lines.append(f"  Source SHA256 : {record['source_sha256']}")
+            yield f"  Source SHA256 : {record['source_sha256']}\n"
         if record["metadata"] is None and record["payload"]:
-            lines.append(f"  Payload       : {record['payload']['status']}")
+            yield f"  Payload       : {record['payload']['status']}\n"
             if record["payload"]["sha256"]:
-                lines.append(f"  Payload SHA256: {record['payload']['sha256']}")
+                yield f"  Payload SHA256: {record['payload']['sha256']}\n"
         for issue in record["issues"]:
-            lines.append(
-                f"  {issue['severity'].upper()} [{safe_text(issue['code'])}]: {safe_text(issue['message'])}"
-            )
+            check_budget()
+            yield f"  {issue['severity'].upper()} [{safe_text(issue['code'])}]: {safe_text(issue['message'])}\n"
     summary = report["summary"]
-    lines.extend(("", "Summary: " + ", ".join(f"{k}={v}" for k, v in summary.items())))
+    yield "\nSummary: " + ", ".join(f"{k}={v}" for k, v in summary.items()) + "\n"
     selection = report.get("selection")
     if selection:
-        lines.append(
-            f"Selection: {selection['matched']} shown, {selection['excluded']} excluded; summary covers full scan."
-        )
+        yield f"Selection: {selection['matched']} shown, {selection['excluded']} excluded; summary covers full scan.\n"
     timeline = report.get("timeline")
     if timeline:
-        lines.append(
-            f"Timeline: {len(timeline['events'])} dated records, {timeline['undated_records']} undated."
-        )
+        yield f"Timeline: {len(timeline['events'])} dated records, {timeline['undated_records']} undated.\n"
     if not summary["candidates"] and not summary.get("orphan_payloads"):
-        lines.append(
-            "No $I metadata candidates or orphan $R items found. Use --recursive for nested SID directories."
-        )
-    return "\n".join(lines) + "\n"
+        yield "No $I metadata candidates or orphan $R items found. Use --recursive for nested SID directories.\n"
 
 
-def render(report: dict, format_name: str) -> str:
-    if format_name == "json":
-        return json.dumps(report, ensure_ascii=True, indent=2, allow_nan=False) + "\n"
-    if format_name == "csv":
-        return render_csv(report)
-    if format_name == "table":
-        return render_table(report)
-    if format_name == "html":
-        from .html_report import render_html
+def iter_render(
+    report: dict, format_name: str, *, limits: WorkLimits | None = None
+) -> Iterator[str]:
+    """Yield checked output chunks, charging their exact UTF-8 size once.
 
-        return render_html(report)
-    raise ValueError(f"Unknown report format: {format_name}")
+    A failed iterator is incomplete. File callers must remove their own partial
+    output; interactive callers should use :func:`render` before displaying it.
+    """
+    with operation_budget(limits, operation="render", reuse=True) as budget:
+        budget.check_record_count(len(report["records"]))
+        if format_name == "json":
+            chunks = json.JSONEncoder(ensure_ascii=True, indent=2, allow_nan=False).iterencode(
+                report
+            )
+        elif format_name == "csv":
+            chunks = _iter_csv(report)
+        elif format_name == "table":
+            chunks = _iter_table(report)
+        elif format_name == "html":
+            from .html_report import _iter_html
+
+            chunks = _iter_html(report)
+        else:
+            raise ValueError(f"Unknown report format: {format_name}")
+        for chunk in chunks:
+            budget.consume_export_bytes(len(chunk.encode("utf-8")))
+            yield chunk
+            budget.check()
+        if format_name == "json":
+            budget.consume_export_bytes(1)
+            yield "\n"
+        budget.check()
+
+
+def render(report: dict, format_name: str, *, limits: WorkLimits | None = None) -> str:
+    """Return a complete bounded rendering before a caller displays any text."""
+    with operation_budget(limits, operation="render", reuse=True) as budget:
+        text = "".join(iter_render(report, format_name, limits=limits))
+        budget.check()
+        return text
+
+
+def render_csv(report: dict, *, limits: WorkLimits | None = None) -> str:
+    return render(report, "csv", limits=limits)
+
+
+def render_table(report: dict, *, limits: WorkLimits | None = None) -> str:
+    return render(report, "table", limits=limits)

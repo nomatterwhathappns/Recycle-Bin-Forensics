@@ -1,4 +1,4 @@
-# Recycle Bin Forensics 1.4
+# Recycle Bin Forensics 1.5
 
 An offline desktop application and Python command-line toolkit for examining modern Windows Recycle Bin artefacts. It parses `$I` metadata, inventories sibling and orphan `$R` payloads, selects findings by investigative criteria, builds deletion timelines, and exports JSON, CSV, terminal, or standalone HTML reports.
 
@@ -163,6 +163,7 @@ The timeline sorts by encoded deletion FILETIME. Payload filesystem modification
 | Code | Meaning |
 | --- | --- |
 | `0` | Scan completed without record/discovery errors or skipped items; warnings still need review |
+| `3` | Workload budget exceeded; the operation is incomplete and no completed partial output is produced |
 | `1` | One or more record/discovery errors or skipped evidence items |
 | `2` | Invalid usage/configuration, top-level input/output failure, or no artefact candidates in scope |
 | `130` | Interrupted by the operator; the scan is incomplete |
@@ -188,6 +189,7 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Independent reference comparison and its limits](docs/VALIDATION_REFERENCE.md)
 - [Benchmark method and measured results](docs/BENCHMARKS.md)
 - [Release contents and verification](docs/RELEASES.md)
+- [Resource limits and incomplete operations](docs/LIMITS.md)
 
 - [Desktop user guide](docs/DESKTOP.md)
 - [Indonesian learning guide and critical code walkthrough](docs/LEARNING_ID.md)
@@ -198,7 +200,7 @@ This release does not parse legacy `INFO2`, carve unallocated space, restore con
 - [Changes and migration notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-**Application version `1.4.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
+**Application version `1.5.0` and report schema version `2.0` are separate contracts.** Desktop layout, sorting, text size, progress, and cancellation do not change the completed-report schema. Desktop column sorting changes table presentation, not report ordering. Consumers must check `schema_version`; the historical [schema 1.0](schemas/report-v1.schema.json) remains available for earlier reports.
 
 Feature additions increment the minor version (`1.0.0` to `1.1.0`); compatible bug fixes increment the patch version (`1.1.0` to `1.1.1`). A compatibility-breaking application change increments the major version. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
@@ -212,7 +214,7 @@ rbf --version
 rbf-gui
 ```
 
-The version command should report `rbf 1.4.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
+The version command should report `rbf 1.5.0`. An update conflict should be resolved without discarding local changes. Source updates do not replace previously exported reports.
 
 ## Development and validation
 

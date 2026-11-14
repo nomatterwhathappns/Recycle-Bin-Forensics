@@ -1,6 +1,6 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.4.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.5.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
@@ -50,7 +50,7 @@ rbf --version
 rbf-gui
 ```
 
-The expected version is `rbf 1.4.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
+The expected version is `rbf 1.5.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 
@@ -64,6 +64,10 @@ Open **Analisis baru**. Use **Pilih folder** for an acquired Recycle Bin tree or
 The original Windows path encoded inside `$I` remains evidence text. Selecting a metadata item does not cause the app to open that original path on the examiner's computer. Payload lookup uses sibling acquired filenames.
 
 Use a protected original plus a verified working copy or read-only mount. Read-only program operations can still update filesystem access times on a writable source. The [evidence workflow](EVIDENCE_WORKFLOW.md) explains collection and interpretation limits.
+
+### Resource budgets
+
+Default workload budgets are always active. Expand **Atur batas beban** on the analysis page to adjust record count, aggregate metadata/payload bytes, depth, duration, report bytes, or inspected entries. The form values apply to the next scan/filter/sort/export operation, so a report-size limit can be raised before retrying an export without rescanning. Invalid bounds are rejected before discarding an old result. A limited scan has no completed exportable report. A limited filter/sort/export preserves the last complete inventory and view; partial output owned by that export is removed. See [limits and recovery](LIMITS.md).
 
 ## 2. Start, follow progress, or cancel
 

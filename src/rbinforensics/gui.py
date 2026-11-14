@@ -30,6 +30,7 @@ from . import __version__
 from .analysis import FilterOptions, selected_records
 from .desktop import DesktopSession
 from .detail_view import DetailView
+from .limits import WorkLimitExceeded, WorkLimits, operation_budget
 from .presentation import record_label, sort_records
 from .reports import safe_text
 from .scan_control import ScanProgress
@@ -220,6 +221,11 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self.case_visible = tk.BooleanVar(self, value=False)
         self.filters_visible = tk.BooleanVar(self, value=False)
         self.font_size_var = tk.IntVar(self, value=11)
+        self.limits_visible = tk.BooleanVar(self, value=False)
+        self.limit_vars = {
+            name: tk.StringVar(self, value=str(value))
+            for name, value in WorkLimits().to_dict().items()
+        }
 
     def _style(self) -> None:
         size = self.font_size_var.get()
@@ -367,6 +373,40 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         ttk.Label(zone, text="UTC selalu dipertahankan di laporan.", style="Muted.TLabel").pack(
             side="left", padx=16
         )
+        self.limits_toggle = self._input(
+            ttk.Checkbutton(
+                parent,
+                text="Atur batas beban — batas baku selalu aktif",
+                variable=self.limits_visible,
+                command=self._toggle_limits,
+            )
+        )
+        self.limits_toggle.pack(anchor="w", pady=(0, 8))
+        self.limits_fields = ttk.LabelFrame(parent, text="Batas per operasi", padding=10)
+        for index, (name, label) in enumerate(
+            (
+                ("max_records", "Jumlah record"),
+                ("max_payload_hash_bytes", "Total hash payload (byte)"),
+                ("max_metadata_bytes", "Total metadata (byte)"),
+                ("max_depth", "Kedalaman folder (akar = 0)"),
+                ("max_operation_seconds", "Durasi per operasi (detik)"),
+                ("max_export_bytes", "Ukuran laporan (byte)"),
+                ("max_visited_entries", "Entri folder diperiksa"),
+            )
+        ):
+            frame = ttk.Frame(self.limits_fields)
+            frame.grid(row=index // 3, column=index % 3, sticky="ew", padx=5, pady=4)
+            self.limits_fields.columnconfigure(index % 3, weight=1)
+            ttk.Label(frame, text=label, wraplength=240).pack(anchor="w")
+            self._input(ttk.Entry(frame, textvariable=self.limit_vars[name], width=18)).pack(
+                fill="x"
+            )
+        ttk.Label(
+            self.limits_fields,
+            text="Batas berlaku saat scan, filter, urut, atau ekspor berikutnya. Batas waktu diperiksa berkala.",
+            wraplength=850,
+            style="Muted.TLabel",
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=4)
         self.case_toggle = self._input(
             ttk.Checkbutton(
                 parent,
@@ -416,6 +456,19 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self.case_fields.pack(fill="x", after=self.case_toggle)
         else:
             self.case_fields.pack_forget()
+
+    def _toggle_limits(self) -> None:
+        if self.limits_visible.get():
+            self.limits_fields.pack(fill="x", after=self.limits_toggle, pady=(0, 8))
+        else:
+            self.limits_fields.pack_forget()
+
+    def _limits(self) -> WorkLimits:
+        values = {}
+        for name, variable in self.limit_vars.items():
+            value = variable.get().strip()
+            values[name] = float(value) if name == "max_operation_seconds" else int(value)
+        return WorkLimits(**values)
 
     def _build_results(self) -> None:
         parent = self.results_page
@@ -708,8 +761,15 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             return
         previous = self._sort_state[tree]
         descending = not previous[1] if previous is not None and previous[0] == column else False
+        try:
+            with operation_budget(self._limits(), operation="sort") as budget:
+                budget.check_record_count(len(self._datasets[tree]))
+                ordered = sort_records(self._datasets[tree], column, descending)
+        except (ValueError, WorkLimitExceeded) as exc:
+            self._dialog_error("Pengurutan belum selesai", exc)
+            return
         self._sort_state[tree] = (column, descending)
-        self._datasets[tree] = sort_records(self._datasets[tree], column, descending)
+        self._datasets[tree] = ordered
         self._pages[tree] = 0
         self._update_sort_heading(tree)
         self._display_page(tree)
@@ -879,6 +939,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 zone,
                 self.case_var.get().strip() or None,
                 self.examiner_var.get().strip() or None,
+                self._limits(),
             )
             source = Path(self.source_var.get()).expanduser()
         except Exception as exc:
@@ -929,7 +990,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         if self.session.state != "complete" or self._awaiting_terminal:
             return
         try:
-            self.session.start_filter(self._filters())
+            self.session.start_filter(self._filters(), limits=self._limits())
         except Exception as exc:
             self._dialog_error("Filter tidak valid", exc)
             return
@@ -1098,7 +1159,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 if not path:
                     return False
                 destination = Path(path)
-            self.session.start_export(destination, format_name)
+            self.session.start_export(destination, format_name, limits=self._limits())
         except Exception as exc:
             self._dialog_error("Ekspor gagal", exc)
             return False
@@ -1220,17 +1281,38 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                     self.status_var.set(
                         "Selesai tanpa kandidat. Periksa sumber atau aktifkan subfolder."
                     )
+            elif kind == "limited":
+                self._deferred_action = None
+                self._deferred_export_succeeded = False
+                self.progress.configure(mode="determinate", value=0)
+                self._clear_results()
+                self.status_var.set("Analisis belum lengkap: " + str(payload))
+                if not self._closing:
+                    self._dialog_error("Batas beban tercapai", payload)
             elif kind == "cancelled":
                 self.progress.configure(mode="determinate", value=0)
                 self._clear_results()
                 self.status_var.set(
                     "Analisis dibatalkan — belum lengkap, tidak ada laporan yang dapat diekspor."
                 )
-            elif kind in ("error", "filter_error", "export_error"):
+            elif kind in (
+                "error",
+                "filter_error",
+                "export_error",
+                "filter_limited",
+                "export_limited",
+            ):
                 self._deferred_action = None
                 self._deferred_export_succeeded = False
                 self.progress.configure(mode="determinate", value=0)
-                self.status_var.set("Pekerjaan gagal: " + str(payload))
+                self.status_var.set(
+                    (
+                        "Operasi belum lengkap: "
+                        if kind.endswith("_limited")
+                        else "Pekerjaan gagal: "
+                    )
+                    + str(payload)
+                )
                 if not self._closing:
                     self._dialog_error("Periksa kembali input atau tujuan laporan", payload)
             elif kind == "exported":

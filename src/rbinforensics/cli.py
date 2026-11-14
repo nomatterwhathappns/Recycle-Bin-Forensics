@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import __version__
 from .analysis import FilterOptions, validate_filters
+from .limits import WorkLimitExceeded, WorkLimits
 from .output import validate_output as _validate_output
 from .output import write_report
 from .reports import render, safe_text
@@ -62,6 +63,23 @@ def _parser() -> argparse.ArgumentParser:
     )
     command.add_argument("--min-size", type=int, help="Minimum recorded original size in bytes")
     command.add_argument("--max-size", type=int, help="Maximum recorded original size in bytes")
+    defaults = WorkLimits()
+    for name, help_text in (
+        ("max_records", "Maximum analysis records"),
+        ("max_payload_hash_bytes", "Maximum aggregate payload bytes hashed"),
+        ("max_metadata_bytes", "Maximum aggregate metadata bytes read"),
+        ("max_depth", "Maximum traversal depth (input directory is depth 0)"),
+        ("max_operation_seconds", "Cooperative deadline per operation in seconds"),
+        ("max_export_bytes", "Maximum UTF-8 report bytes"),
+        ("max_visited_entries", "Maximum inspected directory entries"),
+    ):
+        default = getattr(defaults, name)
+        command.add_argument(
+            "--" + name.replace("_", "-"),
+            type=float if name == "max_operation_seconds" else int,
+            default=default,
+            help=f"{help_text} (default: {default})",
+        )
     return parser
 
 
@@ -75,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
     source = absolute_path(args.input)
     output = absolute_path(args.output) if args.output else None
     try:
+        limits = WorkLimits(
+            **{name: getattr(args, name) for name in WorkLimits.__dataclass_fields__}
+        )
         filters = FilterOptions(
             query=args.query,
             extensions=tuple(args.extension),
@@ -90,18 +111,21 @@ def main(argv: list[str] | None = None) -> int:
         if output:
             _validate_output(source, output)
         options = ScanOptions(
-            args.recursive, args.hash_payload, args.timezone, args.case_id, args.examiner
+            args.recursive, args.hash_payload, args.timezone, args.case_id, args.examiner, limits
         )
         report = scan(source, options, filters)
         if output:
-            write_report(report, output, args.format)
+            write_report(report, output, args.format, limits=limits)
             print(f"Report saved: {safe_text(output)}", file=sys.stderr)
         else:
-            sys.stdout.write(render(report, args.format))
+            sys.stdout.write(render(report, args.format, limits=limits))
         summary = report["summary"]
         if summary["errors"] or summary["skipped"]:
             return 1
         return 0 if summary["candidates"] or summary["orphan_payloads"] else 2
+    except WorkLimitExceeded as exc:
+        print(f"rbf: {safe_text(exc)} No completed output was produced.", file=sys.stderr)
+        return 3
     except ZoneInfoNotFoundError:
         print(
             "rbf: unknown timezone or missing timezone database; install tzdata if needed.",

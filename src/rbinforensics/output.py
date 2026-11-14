@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import stat
+from contextlib import closing
 from pathlib import Path
 
-from .reports import render
+from .limits import WorkLimits, operation_budget
+from .reports import iter_render
 from .scanner import EvidenceError, absolute_path, ensure_no_symlinks
 
 
@@ -24,24 +26,39 @@ def validate_output(source: Path, output: Path, *, source_was_file: bool = False
         raise EvidenceError("output_parent_missing", "Output parent directory must already exist.")
 
 
-def write_report(report: dict, destination: Path, format_name: str) -> Path:
+def write_report(
+    report: dict, destination: Path, format_name: str, *, limits: WorkLimits | None = None
+) -> Path:
     output = absolute_path(destination)
     source = Path(report["input"])
-    source_was_file = any(
-        record["record_type"] == "metadata" and record["source_path"] == str(source)
-        for record in report["records"]
-    )
-    validate_output(source, output, source_was_file=source_was_file)
-    text = render(report, format_name)
-    validate_output(source, output, source_was_file=source_was_file)
     created_identity: tuple[int, int] | None = None
     try:
-        with output.open("x", encoding="utf-8", newline="") as stream:
-            opened = os.fstat(stream.fileno())
-            created_identity = opened.st_dev, opened.st_ino
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
+        with operation_budget(limits, operation="export", reuse=True) as budget:
+            budget.check_record_count(len(report["records"]))
+            source_was_file = False
+            for record in report["records"]:
+                budget.check()
+                if record["record_type"] == "metadata" and record["source_path"] == str(source):
+                    source_was_file = True
+                    break
+            validate_output(source, output, source_was_file=source_was_file)
+            with closing(iter_render(report, format_name, limits=limits)) as chunks:
+                # Validate the format and first chunk before claiming a filename.
+                first = next(chunks)
+                validate_output(source, output, source_was_file=source_was_file)
+                budget.check()
+                with output.open("x", encoding="utf-8", newline="") as stream:
+                    opened = os.fstat(stream.fileno())
+                    created_identity = opened.st_dev, opened.st_ino
+                    stream.write(first)
+                    for chunk in chunks:
+                        stream.write(chunk)
+                        budget.check()
+                    stream.flush()
+                    budget.check()
+                    os.fsync(stream.fileno())
+                    budget.check()
+                budget.check()
     except BaseException:
         if created_identity is not None:
             try:

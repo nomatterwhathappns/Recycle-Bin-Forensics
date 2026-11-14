@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.4.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.4.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.5.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.5.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
@@ -627,3 +627,11 @@ Versi 1.3 menambahkan corpus sintetis, pembandingan parser independen, benchmark
 `DesktopSession.has_unsaved_report` mengikat status penyimpanan kepada identitas analisis, bukan baris yang sedang dipilih atau halaman tabel. Analisis kosong yang selesai juga merupakan hasil yang bisa disimpan. Filter mempertahankan inventaris penuh, dan ekspor JSON menyimpan seluruh record meskipun selection-nya dipersempit. CSV/HTML adalah tampilan pilihan, sehingga keberhasilan menulis keduanya tidak menganggap seluruh inventaris audit sudah disimpan.
 
 Dialog sebelum scan berikutnya atau penutupan menyediakan Simpan JSON, Buang hasil, dan Batal. Aksi lanjutan ditunda selama ekspor JSON berjalan. Membatalkan pemilih file, gagal membuka tujuan, atau gagal menulis tidak boleh memulai scan berikutnya maupun menutup jendela. Penanda tersimpan berubah hanya setelah writer berhasil, untuk analisis yang memang diekspor.
+
+## 31. Batas kerja dan hasil yang belum lengkap
+
+`limits.py` menyediakan `WorkLimits`, `OperationBudget`, dan `WorkLimitExceeded`. ContextVar mengikat penghitung kepada operasi yang sedang berlangsung. Scan independen membuat budget baru; helper filter dan renderer di dalam operasi yang sama berbagi budget sehingga deadline atau byte yang sudah dipakai tidak diam-diam direset. Helper bersarang boleh memperketat batas, tetapi tidak memperlonggar batas induk.
+
+Batas menghitung pekerjaan yang benar-benar dilakukan: entri direktori sebelum ditampung, record metadata/orphan/diagnostik tanpa menghitung pasangan payload dua kali, byte metadata dan hash, serta byte UTF-8 yang akan ditulis. Deadline diperiksa berkala sehingga pembacaan OS yang sedang terblokir tetap perlu kembali lebih dulu. Batas ini mengendalikan workload dan tidak menyatakan plafon RAM yang identik di semua mesin.
+
+Exception batas operasi dipisahkan dari error artefak per-file. Karena itu scanner tidak bisa menangkap kehabisan budget sebagai satu record rusak lalu menyatakan keseluruhan scan selesai. Filter/ekspor yang gagal menjaga hasil lengkap sebelumnya. JSON/CSV/HTML/text ditulis bertahap, dan file parsial yang benar-benar dimiliki writer dibersihkan ketika terjadi kegagalan.

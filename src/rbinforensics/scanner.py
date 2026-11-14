@@ -28,6 +28,7 @@ from .analysis import (
     selected_records,
     validate_filters,
 )
+from .limits import WorkLimits, check_budget, current_budget, operation_budget
 from .parser import ParseError, parse_metadata
 from .scan_control import ScanControl, ScanProgress
 
@@ -49,6 +50,7 @@ _ACTIVE_SCAN: ContextVar[_ProgressState | None] = ContextVar("rbf_active_scan", 
 
 
 def _check_cancel() -> None:
+    check_budget()
     state = _ACTIVE_SCAN.get()
     if state is not None:
         state.control.check()
@@ -57,6 +59,7 @@ def _check_cancel() -> None:
 def _progress(
     phase: str, path: Path | None = None, *, length: int = 0, size: int | None = None
 ) -> None:
+    _check_cancel()
     state = _ACTIVE_SCAN.get()
     if state is not None:
         state.control.emit(
@@ -69,6 +72,7 @@ def _progress(
                 size,
             )
         )
+    _check_cancel()
 
 
 class EvidenceError(ValueError):
@@ -86,6 +90,7 @@ class ScanOptions:
     timezone: str = "UTC"
     case_id: str | None = None
     examiner: str | None = None
+    limits: WorkLimits | None = None
 
 
 def absolute_path(path: Path) -> Path:
@@ -96,12 +101,14 @@ def absolute_path(path: Path) -> Path:
 def ensure_no_symlinks(path: Path) -> None:
     """Reject symlinks and Windows reparse points; do not resolve them first."""
     for component in reversed((path, *path.parents)):
+        _check_cancel()
         try:
             info = component.lstat()
         except FileNotFoundError:
             continue
         if _redirects(info):
             raise EvidenceError("symlink_skipped", f"Symlink/reparse-point component: {component}")
+        _check_cancel()
 
 
 def _redirects(info: os.stat_result) -> bool:
@@ -126,15 +133,20 @@ def _cross_api_identity(info: os.stat_result) -> tuple[int, ...]:
 @contextmanager
 def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
     ensure_no_symlinks(path)
+    _check_cancel()
     before = path.lstat()
+    _check_cancel()
     if not stat.S_ISREG(before.st_mode):
         raise EvidenceError("not_regular_file", "Evidence item is not a regular file.")
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     # A file replaced with a FIFO between lstat/open must not hang the scan.
     flags |= getattr(os, "O_NONBLOCK", 0)
+    _check_cancel()
     descriptor = os.open(path, flags)
     with os.fdopen(descriptor, "rb") as stream:
+        _check_cancel()
         opened = os.fstat(stream.fileno())
+        _check_cancel()
         if not stat.S_ISREG(opened.st_mode) or _cross_api_identity(before) != _cross_api_identity(
             opened
         ):
@@ -143,8 +155,11 @@ def _open_regular(path: Path) -> Iterator[tuple[BinaryIO, os.stat_result]]:
                 f"Evidence changed while opening it (lstat={_identity(before)}, fstat={_identity(opened)}).",
             )
         yield stream, opened
+        _check_cancel()
         after = os.fstat(stream.fileno())
+        _check_cancel()
         path_after = path.lstat()
+        _check_cancel()
         # Also detect replacement of the directory entry during a read.
         if (
             _identity(opened) != _identity(after)
@@ -159,9 +174,14 @@ def _read_metadata(path: Path) -> tuple[bytes, str]:
     with _open_regular(path) as (stream, info):
         if info.st_size > MAX_METADATA_BYTES:
             raise EvidenceError("metadata_too_large", "Metadata exceeds the 128 KiB safety limit.")
+        budget = current_budget()
+        if budget is not None:
+            budget.check_metadata_capacity(info.st_size)
         _check_cancel()
         data = stream.read(MAX_METADATA_BYTES + 1)
         _check_cancel()
+        if budget is not None:
+            budget.consume_metadata_bytes(len(data))
         if len(data) > MAX_METADATA_BYTES:
             raise EvidenceError("metadata_too_large", "Metadata exceeds the 128 KiB safety limit.")
         if len(data) != info.st_size:
@@ -174,6 +194,9 @@ def _hash_payload(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     length = 0
     with _open_regular(path) as (stream, info):
+        budget = current_budget()
+        if budget is not None:
+            budget.check_hash_capacity(info.st_size)
         _progress("hashing", path, length=0, size=info.st_size)
         while True:
             _check_cancel()
@@ -181,6 +204,8 @@ def _hash_payload(path: Path) -> tuple[str, int]:
             _check_cancel()
             if not block:
                 break
+            if budget is not None:
+                budget.consume_hash_bytes(len(block))
             digest.update(block)
             length += len(block)
             _progress("hashing", path, length=length, size=info.st_size)
@@ -197,6 +222,7 @@ def _issue(record: dict, code: str, message: str = "", severity: str = "warning"
 
 
 def _new_record(path: Path, record_type: str = "metadata") -> dict:
+    _reserve_record(path, record_type)
     return {
         "record_type": record_type,
         "source_path": str(path),
@@ -209,6 +235,19 @@ def _new_record(path: Path, record_type: str = "metadata") -> dict:
         "payload": None,
         "issues": [],
     }
+
+
+def _reserve_record(path: Path, record_type: str = "metadata") -> None:
+    budget = current_budget()
+    if budget is not None:
+        # An observed $I entry is admitted during inventory, before it can
+        # become either a metadata result or its discovery diagnostic.
+        kind = (
+            "metadata"
+            if record_type == "discovery" and path.name.lower().startswith("$i")
+            else record_type
+        )
+        budget.reserve_record(kind, path)
 
 
 def _is_payload_name(name: str) -> bool:
@@ -242,36 +281,60 @@ def _discover(
     issues: list[dict],
     payloads: list[Path],
     metadata_names: dict[Path, set[str]],
+    indexes: dict[Path, dict[str, list[Path]]],
 ) -> Iterator[Path]:
     # An explicit stack avoids Python recursion limits on deep directory trees.
-    pending = [directory]
+    pending = [(directory, 0)]
     while pending:
         _check_cancel()
-        current = pending.pop()
+        current, depth = pending.pop()
+        budget = current_budget()
+        if budget is not None:
+            budget.check_depth(depth)
         _progress("discovering", current)
         try:
             ensure_no_symlinks(current)
+            _check_cancel()
             with os.scandir(current) as entries:
                 collected = []
                 for entry in entries:
                     _check_cancel()
+                    if budget is not None:
+                        budget.visit_entry()
+                    if entry.name.lower().startswith("$i"):
+                        _reserve_record(Path(entry.path))
                     collected.append(entry)
+                _check_cancel()
                 ordered = sorted(collected, key=lambda e: e.name)
-            metadata_names[current] = {
-                entry.name.translate(ASCII_CASE)
-                for entry in ordered
-                if entry.name.lower().startswith("$i")
-            }
+            _check_cancel()
+            names: set[str] = set()
+            index: dict[str, list[Path]] = {}
+            for entry in ordered:
+                _check_cancel()
+                if entry.name.lower().startswith("$i"):
+                    names.add(entry.name.translate(ASCII_CASE))
+                if _is_payload_name(entry.name):
+                    index.setdefault(entry.name.translate(ASCII_CASE), []).append(Path(entry.path))
+            # Publish only a complete directory inventory. In particular, a
+            # failed listing cannot establish that a collected $R is orphaned.
+            metadata_names[current] = names
+            indexes[current] = index
+            for matches in index.values():
+                for path in matches:
+                    _check_cancel()
+                    if ("$I" + path.name[2:]).translate(ASCII_CASE) not in names:
+                        _reserve_record(path, "orphan_payload")
+                        payloads.append(path)
             children = []
             for entry in ordered:
                 _check_cancel()
                 path = Path(entry.path)
                 _progress("discovering", path)
                 is_payload = _is_payload_name(entry.name)
-                if is_payload:
-                    payloads.append(path)
                 try:
-                    if _redirects(entry.stat(follow_symlinks=False)):
+                    entry_info = entry.stat(follow_symlinks=False)
+                    _check_cancel()
+                    if _redirects(entry_info):
                         if not is_payload and (recursive or entry.name.lower().startswith("$i")):
                             record = _new_record(path, "discovery")
                             _issue(
@@ -281,11 +344,11 @@ def _discover(
                             )
                             record["status"] = "skipped"
                             issues.append(record)
-                    elif entry.is_dir(follow_symlinks=False):
+                    elif stat.S_ISDIR(entry_info.st_mode):
                         if entry.name.lower().startswith("$i"):
                             yield path
                         elif recursive and not is_payload:
-                            children.append(path)
+                            children.append((path, depth + 1))
                     elif entry.name.lower().startswith("$i"):
                         yield path
                 except OSError as exc:
@@ -293,6 +356,7 @@ def _discover(
                     _issue(record, "discovery_error", str(exc), "error")
                     issues.append(record)
             pending.extend(reversed(children))
+            _check_cancel()
         except (OSError, EvidenceError) as exc:
             record = _new_record(current, "discovery")
             _issue(record, getattr(exc, "code", "discovery_error"), str(exc), "error")
@@ -311,8 +375,10 @@ def _empty_payload(requested: bool) -> dict:
 
 
 def _inspect_payload(record: dict, path: Path, requested: bool, result: dict) -> None:
+    _check_cancel()
     result["path"] = str(path)
     info = path.lstat()
+    _check_cancel()
     if _redirects(info):
         result["status"] = "symlink_skipped"
         _issue(
@@ -335,8 +401,10 @@ def _inspect_payload(record: dict, path: Path, requested: bool, result: dict) ->
         if requested:
             digest, length = _hash_payload(path)
             result.update(sha256=digest, size=length, hash_status="computed")
+            _check_cancel()
             if length != info.st_size or _identity(info) != _identity(path.lstat()):
                 raise EvidenceError("changed_during_read", "Payload changed before/during hashing.")
+            _check_cancel()
     else:
         result["status"] = "special_file_skipped"
         _issue(record, "payload_not_regular", "Special files are never opened.")
@@ -368,12 +436,17 @@ def _payload(record: dict, source: Path, requested: bool, indexes: dict) -> dict
     try:
         if source.parent not in indexes:
             index: dict[str, list[Path]] = {}
+            _check_cancel()
             with os.scandir(source.parent) as entries:
                 for entry in entries:
                     _check_cancel()
+                    budget = current_budget()
+                    if budget is not None:
+                        budget.visit_entry()
                     if _is_payload_name(entry.name):
                         key = entry.name.translate(ASCII_CASE)
                         index.setdefault(key, []).append(Path(entry.path))
+            _check_cancel()
             indexes[source.parent] = index
         matches = indexes[source.parent].get(wanted, [])
         if not matches:
@@ -439,6 +512,7 @@ def _scan(
     source = absolute_path(input_path)
     ensure_no_symlinks(source)
     info = source.stat()
+    _check_cancel()
     if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
         raise EvidenceError("invalid_input", "Input must be a regular file or directory.")
     zone = timezone.utc if options.timezone == "UTC" else ZoneInfo(options.timezone)
@@ -447,10 +521,11 @@ def _scan(
     discovery: list[dict] = []
     orphan_candidates: list[Path] = []
     metadata_names: dict[Path, set[str]] = {}
+    indexes: dict[Path, dict[str, list[Path]]] = {}
     _progress("discovering", source)
     candidates = (
-        _discover(source, options.recursive, discovery, orphan_candidates, metadata_names)
-        if source.is_dir()
+        _discover(source, options.recursive, discovery, orphan_candidates, metadata_names, indexes)
+        if stat.S_ISDIR(info.st_mode)
         else [source]
     )
     state = _ACTIVE_SCAN.get()
@@ -460,16 +535,9 @@ def _scan(
         # existing streaming path for clients that do not request progress.
         candidates = list(candidates)
         _check_cancel()
-        orphan_candidates = [
-            path
-            for path in orphan_candidates
-            if ("$I" + path.name[2:]).translate(ASCII_CASE)
-            not in metadata_names.get(path.parent, set())
-        ]
         discovery_jobs = _discovery_metadata_jobs(discovery, metadata_names)
         state.total = len(candidates) + len(orphan_candidates) + len(discovery_jobs)
         _progress("processing", source)
-    indexes: dict = {}
     for path in candidates:
         _check_cancel()
         _progress("processing", path)
@@ -478,6 +546,7 @@ def _scan(
             data, digest = _read_metadata(path)
             record.update(source_size=len(data), source_sha256=digest)
             metadata = parse_metadata(data)
+            _check_cancel()
             record["metadata"] = asdict(metadata)
             record["metadata"].pop("warnings")
             try:
@@ -488,6 +557,7 @@ def _scan(
                 record["metadata"]["deleted_at_display"] = None
                 _issue(record, "display_time_out_of_range", "Timezone conversion is out of range.")
             for code in metadata.warnings:
+                _check_cancel()
                 _issue(record, code)
             record["payload"] = _payload(record, path, options.hash_payload, indexes)
         except (OSError, EvidenceError, ParseError) as exc:
@@ -505,6 +575,7 @@ def _scan(
         _check_cancel()
         if len(group) > 1:
             for record in group:
+                _check_cancel()
                 _issue(
                     record,
                     "metadata_name_collision",
@@ -512,12 +583,10 @@ def _scan(
                 )
     for path in orphan_candidates:
         _check_cancel()
-        counterpart = ("$I" + path.name[2:]).translate(ASCII_CASE)
-        if counterpart not in metadata_names.get(path.parent, set()):
-            _progress("processing", path)
-            records.append(_orphan_payload(path, options.hash_payload))
-            if state is not None:
-                state.processed += 1
+        _progress("processing", path)
+        records.append(_orphan_payload(path, options.hash_payload))
+        if state is not None:
+            state.processed += 1
     if discovery_jobs is None:
         discovery_jobs = _discovery_metadata_jobs(discovery, metadata_names)
     for record in discovery_jobs:
@@ -538,7 +607,15 @@ def _scan(
         "started_at_utc": started,
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
         "input": str(source),
-        "options": asdict(options),
+        # Work limits are operation controls, not forensic evidence fields.
+        # Preserve the strict schema-2 report contract and its five options.
+        "options": {
+            "recursive": options.recursive,
+            "hash_payload": options.hash_payload,
+            "timezone": options.timezone,
+            "case_id": options.case_id,
+            "examiner": options.examiner,
+        },
         "summary": {
             "candidates": sum(r["record_type"] == "metadata" for r in records),
             "parsed": sum(r["metadata"] is not None for r in records),
@@ -571,11 +648,16 @@ def scan(
     Progress callbacks execute on the caller's scanning thread. Discovery has
     no total; controlled scans establish an item total before processing. Only
     the final ``complete`` phase means the entire report is ready. Cancellation
-    raises ``ScanCancelled`` and never returns a partial completed report.
+    raises ``ScanCancelled``; exhausted workload limits raise
+    ``WorkLimitExceeded``. Neither returns a partial completed report.
     """
+    options = options or ScanOptions()
     state = _ProgressState(control) if control is not None else None
     token = _ACTIVE_SCAN.set(state)
     try:
-        return _scan(input_path, options, filters)
+        # Public calls always own a fresh budget; nested callbacks and other
+        # threads must neither spend nor replace an outer scan's allowances.
+        with operation_budget(options.limits, operation="scan", control=control):
+            return _scan(input_path, options, filters)
     finally:
         _ACTIVE_SCAN.reset(token)

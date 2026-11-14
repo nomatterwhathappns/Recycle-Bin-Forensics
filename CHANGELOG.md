@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+
+### Added
+
+- Configurable record, metadata/hash byte, directory-entry/depth, operation-duration, and report-size budgets in CLI and desktop.
+- Explicit incomplete-operation outcomes: CLI exit 3, no completed partial scan, and retention of the complete baseline after limited filters/exports.
+- Bounded streaming JSON/CSV/HTML/text exports with exact UTF-8 byte accounting and ownership-safe partial-file cleanup.
+
+### Changed
+
+- Filtering checks budgets while preserving nested isolation and avoids copying obsolete derived views.
+- Discovery reuses sibling indexes and counts records without double-counting paired payloads.
+- Application/package version is `1.5.0`; complete forensic reports remain schema `2.0`.
+
 ## 1.4.0
 
 ### Added

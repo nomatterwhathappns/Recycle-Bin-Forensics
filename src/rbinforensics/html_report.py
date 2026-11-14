@@ -12,6 +12,9 @@ import hashlib
 import html
 import unicodedata
 from collections import Counter
+from collections.abc import Iterator
+
+from .limits import WorkLimits, check_budget
 
 _SCRIPT = """'use strict';
 (() => {
@@ -146,28 +149,37 @@ table{min-width:0}.two-columns{display:block}details{display:none}.footnote{font
 """
 
 
-def _text(value: object | None) -> str:
-    """Make hidden control/bidi characters explicit, then escape HTML syntax."""
+def _iter_text(value: object | None) -> Iterator[str]:
+    """Escape bounded text pieces so one evidence value cannot build a document."""
     raw = "Unknown" if value is None else str(value)
-    visible = "".join(
-        f"\\u{ord(char):04x}" if unicodedata.category(char).startswith("C") else char
-        for char in raw
-    )
-    return html.escape(visible, quote=True)
+    for offset in range(0, len(raw), 4096):
+        check_budget()
+        visible = "".join(
+            f"\\u{ord(char):04x}" if unicodedata.category(char).startswith("C") else char
+            for char in raw[offset : offset + 4096]
+        )
+        yield html.escape(visible, quote=True)
 
 
-def _field(label: str, value: object | None, *, wide: bool = False) -> str:
+def _iter_field(label: str, value: object | None, *, wide: bool = False) -> Iterator[str]:
     css = ' class="wide"' if wide else ""
-    return f"<div{css}><dt>{_text(label)}</dt><dd>{_text(value)}</dd></div>"
+    yield f"<div{css}><dt>"
+    yield from _iter_text(label)
+    yield "</dt><dd>"
+    yield from _iter_text(value)
+    yield "</dd></div>"
 
 
-def _badge(value: object) -> str:
+def _iter_badge(value: object) -> Iterator[str]:
     # CSS class selection comes from a closed vocabulary, never evidence text.
     css = value if value in ("ok", "warning", "error", "skipped") else ""
-    return f'<span class="badge {css}">{_text(value)}</span>'
+    yield f'<span class="badge {css}">'
+    yield from _iter_text(value)
+    yield "</span>"
 
 
-def _record_row(record: dict, order: int) -> str:
+def _iter_record_row(record: dict, order: int) -> Iterator[str]:
+    check_budget()
     metadata = record.get("metadata") or {}
     payload = record.get("payload") or {}
     name = record.get("source_name", "Unknown")
@@ -175,9 +187,6 @@ def _record_row(record: dict, order: int) -> str:
     size = metadata.get("original_size", payload.get("size"))
     deleted = metadata.get("deleted_at_utc")
     raw_time = metadata.get("deletion_filetime") if deleted else ""
-    search = " ".join(
-        str(value or "") for value in (name, record.get("source_path"), original, record.get("sid"))
-    )
     attributes = {
         "source": name,
         "size": "" if size is None else size,
@@ -185,185 +194,214 @@ def _record_row(record: dict, order: int) -> str:
         "order": order,
         "kind": record.get("record_type", "metadata"),
         "status": record.get("status", "unknown"),
-        "search": search,
     }
-    attrs = " ".join(f'data-{key}="{_text(value)}"' for key, value in attributes.items())
-    details = "".join(
-        _field(label, value)
-        for label, value in (
-            ("Acquired source path", record.get("source_path")),
-            ("Source size (bytes)", record.get("source_size")),
-            ("Source SHA-256", record.get("source_sha256")),
-            ("SID context", record.get("sid")),
-            ("Metadata format", metadata.get("format_version")),
-            ("Raw deletion FILETIME", metadata.get("deletion_filetime")),
-            ("Display time", metadata.get("deleted_at_display")),
-            ("Payload path", payload.get("path")),
-            ("Payload size (bytes)", payload.get("size")),
-            ("Payload SHA-256", payload.get("sha256")),
-            ("Payload hash status", payload.get("hash_status")),
-            ("Payload size matches metadata", payload.get("size_matches_metadata")),
-        )
-    )
-    path = f'<div class="original mono">{_text(original)}</div>' if original is not None else ""
-    return (
-        f'<tr {attrs}><td><div class="artifact">{_text(name)}</div>{path}'
-        f'<span class="badge">{_text(record.get("record_type", "metadata"))}</span>'
-        f'<details><summary>Provenance &amp; details</summary><dl class="record-details">{details}</dl></details></td>'
-        f'<td class="mono nowrap">{_text(deleted)}</td><td class="number">{_text(size)}</td>'
-        f'<td><span class="badge">{_text(payload.get("status"))}</span></td>'
-        f"<td>{_badge(record.get('status', 'unknown'))}</td></tr>"
-    )
+    yield "<tr "
+    for key, value in attributes.items():
+        yield f'data-{key}="'
+        yield from _iter_text(value)
+        yield '" '
+    yield 'data-search="'
+    for index, value in enumerate((name, record.get("source_path"), original, record.get("sid"))):
+        if index:
+            yield " "
+        yield from _iter_text(str(value or ""))
+    yield '"><td><div class="artifact">'
+    yield from _iter_text(name)
+    yield "</div>"
+    if original is not None:
+        yield '<div class="original mono">'
+        yield from _iter_text(original)
+        yield "</div>"
+    yield '<span class="badge">'
+    yield from _iter_text(record.get("record_type", "metadata"))
+    yield '</span><details><summary>Provenance &amp; details</summary><dl class="record-details">'
+    for label, value in (
+        ("Acquired source path", record.get("source_path")),
+        ("Source size (bytes)", record.get("source_size")),
+        ("Source SHA-256", record.get("source_sha256")),
+        ("SID context", record.get("sid")),
+        ("Metadata format", metadata.get("format_version")),
+        ("Raw deletion FILETIME", metadata.get("deletion_filetime")),
+        ("Display time", metadata.get("deleted_at_display")),
+        ("Payload path", payload.get("path")),
+        ("Payload size (bytes)", payload.get("size")),
+        ("Payload SHA-256", payload.get("sha256")),
+        ("Payload hash status", payload.get("hash_status")),
+        ("Payload size matches metadata", payload.get("size_matches_metadata")),
+    ):
+        yield from _iter_field(label, value)
+    yield '</dl></details></td><td class="mono nowrap">'
+    yield from _iter_text(deleted)
+    yield '</td><td class="number">'
+    yield from _iter_text(size)
+    yield '</td><td><span class="badge">'
+    yield from _iter_text(payload.get("status"))
+    yield "</span></td><td>"
+    yield from _iter_badge(record.get("status", "unknown"))
+    yield "</td></tr>"
 
 
 def _timeline(report: dict, selected: list[dict]) -> dict:
     if "timeline" in report:
+        check_budget()
         return report["timeline"]
     # Rendering a scanner-only report remains useful for library consumers.
     events = []
     for record in selected:
+        check_budget()
         metadata = record.get("metadata") or {}
         if metadata.get("deleted_at_utc"):
             events.append(
                 {**metadata, "source_path": record["source_path"], "sid": record.get("sid")}
             )
-    events.sort(key=lambda event: (event["deletion_filetime"], event["source_path"]))
-    days = Counter(event["deleted_at_utc"][:10] for event in events)
+
+    def event_key(event: dict) -> tuple:
+        check_budget()
+        return event["deletion_filetime"], event["source_path"]
+
+    events.sort(key=event_key)
+    check_budget()
+    days: Counter = Counter()
+    for event in events:
+        check_budget()
+        days[event["deleted_at_utc"][:10]] += 1
+    daily_counts = []
+    for day, count in sorted(days.items()):
+        check_budget()
+        daily_counts.append({"date_utc": day, "count": count})
     return {
         "events": events,
         "undated_records": len(selected) - len(events),
-        "daily_counts": [{"date_utc": day, "count": count} for day, count in sorted(days.items())],
+        "daily_counts": daily_counts,
     }
 
 
-def _render_timeline(timeline: dict) -> str:
+def _iter_timeline(timeline: dict) -> Iterator[str]:
     events = timeline.get("events", [])
-    items = "".join(
-        '<li><span class="dot" aria-hidden="true"></span><div>'
-        f"<time>{_text(event.get('deleted_at_utc'))}</time>"
-        f'<div class="event-path mono">{_text(event.get("original_path"))}</div>'
-        f'<div class="event-meta">{_text(event.get("original_size"))} bytes'
-        f" &middot; SID {_text(event.get('sid'))}</div></div></li>"
-        for event in events
-    )
-    body = (
-        f'<ol class="timeline">{items}</ol>'
-        if items
-        else '<div class="empty">No selected records have a usable deletion timestamp.</div>'
-    )
-    return (
+    yield (
         '<section class="panel" aria-labelledby="timeline-heading"><div class="section-head">'
         '<div><h2 id="timeline-heading">Deletion timeline</h2><p>Selected records, ordered by raw FILETIME. Times below are UTC.</p></div>'
-        f'<span class="tag">{len(events)} events</span></div>{body}'
-        f'<p class="notes">{_text(timeline.get("undated_records", 0))} selected records have no usable deletion timestamp. '
+        f'<span class="tag">{len(events)} events</span></div>'
+    )
+    if events:
+        yield '<ol class="timeline">'
+        for event in events:
+            check_budget()
+            yield '<li><span class="dot" aria-hidden="true"></span><div><time>'
+            yield from _iter_text(event.get("deleted_at_utc"))
+            yield '</time><div class="event-path mono">'
+            yield from _iter_text(event.get("original_path"))
+            yield '</div><div class="event-meta">'
+            yield from _iter_text(event.get("original_size"))
+            yield " bytes &middot; SID "
+            yield from _iter_text(event.get("sid"))
+            yield "</div></div></li>"
+        yield "</ol>"
+    else:
+        yield '<div class="empty">No selected records have a usable deletion timestamp.</div>'
+    yield '<p class="notes">'
+    yield from _iter_text(timeline.get("undated_records", 0))
+    yield (
+        " selected records have no usable deletion timestamp. "
         "Source filesystem times are never substituted.</p></section>"
     )
 
 
-def _render_days(timeline: dict) -> str:
+def _iter_days(timeline: dict) -> Iterator[str]:
     days = timeline.get("daily_counts", [])
-    maximum = max((day["count"] for day in days), default=1)
-    bars = "".join(
-        f'<li><div class="bar-label"><span>{_text(day["date_utc"])}</span><strong>{_text(day["count"])}</strong></div>'
-        f'<div class="track"><div class="bar" style="width:{int(day["count"] * 100 / maximum)}%"></div></div></li>'
-        for day in days
-    )
-    content = (
-        f'<ul class="bars">{bars}</ul>'
-        if bars
-        else '<div class="empty">No dated events in this selection.</div>'
-    )
-    return (
+    maximum = 1
+    for index, day in enumerate(days):
+        check_budget()
+        maximum = max(maximum, day["count"]) if index else day["count"]
+    yield (
         '<section class="panel" aria-labelledby="daily-heading"><div class="section-head"><div>'
         '<h2 id="daily-heading">Activity by day</h2><p>UTC day &middot; selected deletion events</p></div></div>'
-        f'{content}<p class="notes">Counts describe supplied artifacts. A quiet day does not establish that no deletion occurred.</p></section>'
     )
+    if days:
+        yield '<ul class="bars">'
+        for day in days:
+            check_budget()
+            yield '<li><div class="bar-label"><span>'
+            yield from _iter_text(day["date_utc"])
+            yield "</span><strong>"
+            yield from _iter_text(day["count"])
+            yield '</strong></div><div class="track"><div class="bar" style="width:'
+            yield str(int(day["count"] * 100 / maximum))
+            yield '%"></div></div></li>'
+        yield "</ul>"
+    else:
+        yield '<div class="empty">No dated events in this selection.</div>'
+    yield '<p class="notes">Counts describe supplied artifacts. A quiet day does not establish that no deletion occurred.</p></section>'
 
 
-def _render_diagnostics(records: list[dict]) -> str:
-    affected = [record for record in records if record.get("issues")]
-    items = ""
-    for record in affected:
-        issues = "".join(
-            f"<li>{_badge(issue.get('severity', 'warning'))} "
-            f'<span class="issue-code">{_text(issue.get("code"))}</span>: {_text(issue.get("message"))}</li>'
-            for issue in record["issues"]
-        )
-        items += (
-            f'<li><div class="mono">{_text(record.get("source_path"))}</div>'
-            f'<ul class="issue-list">{issues}</ul></li>'
-        )
-    content = (
-        f'<ul class="diagnostics">{items}</ul>'
-        if items
-        else '<div class="empty">No warnings or errors were recorded.</div>'
-    )
-    return (
+def _iter_diagnostics(records: list[dict]) -> Iterator[str]:
+    affected = 0
+    for record in records:
+        check_budget()
+        affected += bool(record.get("issues"))
+    yield (
         '<section class="panel" aria-labelledby="diagnostics-heading"><div class="section-head"><div>'
         '<h2 id="diagnostics-heading">Warnings &amp; errors</h2>'
         "<p>Complete scan diagnostics. CLI selection and browser filters never hide this section.</p></div>"
-        f'<span class="tag">{len(affected)} affected records</span></div>{content}</section>'
+        f'<span class="tag">{affected} affected records</span></div>'
     )
+    if affected:
+        yield '<ul class="diagnostics">'
+        for record in records:
+            check_budget()
+            if not record.get("issues"):
+                continue
+            yield '<li><div class="mono">'
+            yield from _iter_text(record.get("source_path"))
+            yield '</div><ul class="issue-list">'
+            for issue in record["issues"]:
+                check_budget()
+                yield "<li>"
+                yield from _iter_badge(issue.get("severity", "warning"))
+                yield ' <span class="issue-code">'
+                yield from _iter_text(issue.get("code"))
+                yield "</span>: "
+                yield from _iter_text(issue.get("message"))
+                yield "</li>"
+            yield "</ul></li>"
+        yield "</ul>"
+    else:
+        yield '<div class="empty">No warnings or errors were recorded.</div>'
+    yield "</section>"
 
 
-def render_html(report: dict) -> str:
-    """Render an offline report without modifying evidence or report values."""
+def _iter_html(report: dict) -> Iterator[str]:
+    """Stream an offline report; the public renderer owns the operation budget."""
     records = report["records"]
     selection = report.get("selection") or {}
     indexes = selection.get("record_indexes", range(len(records)))
-    selected = [records[index] for index in indexes]
+    selected = []
+    for index in indexes:
+        check_budget()
+        selected.append(records[index])
     timeline = _timeline(report, selected)
     summary = report["summary"]
     options = report["options"]
     tool = report["tool"]
-    orphan_count = sum(record.get("record_type") == "orphan_payload" for record in records)
-    problem_count = sum(
-        record.get("status") in ("warning", "error", "skipped") for record in records
-    )
-    cards = "".join(
-        f'<div class="stat"><span class="stat-label">{label}</span><strong class="stat-value">{_text(value)}</strong>'
-        f'<span class="stat-note">{note}</span></div>'
-        for label, value, note in (
-            ("Inventory records", len(records), "Complete supplied scan scope"),
-            ("Metadata parsed", summary.get("parsed", 0), "Decoded $I artifacts"),
-            ("Orphan payloads", orphan_count, "No matching metadata observed"),
-            ("Records needing review", problem_count, "Warnings, errors, or skipped items"),
-        )
-    )
-    context = "".join(
-        _field(label, value, wide=wide)
-        for label, value, wide in (
-            ("Case identifier", options.get("case_id") or "Not supplied", False),
-            ("Examiner label", options.get("examiner") or "Not supplied", False),
-            ("Display timezone", options.get("timezone", "UTC"), False),
-            ("Run started (UTC)", report.get("started_at_utc"), False),
-            ("Run completed (UTC)", report.get("completed_at_utc"), False),
-            ("Schema version", report.get("schema_version"), False),
-            ("Acquired input", report.get("input"), True),
-        )
-    )
-    kinds = sorted({record.get("record_type", "metadata") for record in selected})
-    kind_options = "".join(
-        f'<option value="{_text(kind)}">{_text(kind)}</option>' for kind in kinds
-    )
-    rows = "".join(_record_row(record, order) for order, record in enumerate(selected))
+    orphan_count = problem_count = 0
+    for record in records:
+        check_budget()
+        orphan_count += record.get("record_type") == "orphan_payload"
+        problem_count += record.get("status") in ("warning", "error", "skipped")
+    kinds = set()
+    for record in selected:
+        check_budget()
+        kinds.add(record.get("record_type", "metadata"))
+    kinds = sorted(kinds)
+    check_budget()
     empty_hidden = " hidden" if selected else ""
     state = "active" if selection.get("active") else "not active"
-    filters = selection.get("filters") or {}
-    active_filters = "; ".join(
-        f"{key}={value}"
-        for key, value in filters.items()
-        if value is not None and value != () and value != []
-    )
-    filter_note = (
-        f" Applied CLI filters: {_text(active_filters)}." if selection.get("active") else ""
-    )
     script_hash = base64.b64encode(hashlib.sha256(_SCRIPT.encode("utf-8")).digest()).decode("ascii")
     csp = (
         "default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; "
         f"style-src 'unsafe-inline'; script-src 'sha256-{script_hash}'"
     )
-    return (
+    yield (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<meta http-equiv="Content-Security-Policy" content="{html.escape(csp, quote=True)}">'
@@ -371,27 +409,72 @@ def render_html(report: dict) -> str:
         "<title>Recycle Bin Forensics — Offline report</title>"
         f'<style>{_STYLE}</style></head><body><a class="skip" href="#inventory-heading">Skip to inventory</a>'
         '<main class="shell"><header class="topbar"><div class="brand"><span class="mark" aria-hidden="true">RB</span>'
-        'Recycle Bin Forensics</div><div class="topmeta">'
-        f'<span class="version">v{_text(tool.get("version"))}</span><span class="offline">Offline report</span></div></header>'
+        'Recycle Bin Forensics</div><div class="topmeta"><span class="version">v'
+    )
+    yield from _iter_text(tool.get("version"))
+    yield (
+        '</span><span class="offline">Offline report</span></div></header>'
         '<div class="hero"><div><span class="eyebrow">Evidence inventory &amp; timeline</span>'
         "<h1>Recycle Bin analysis</h1><p>Review recorded deletion artifacts, payload availability, and the findings that need attention.</p></div>"
         '<button id="print-report" class="button" type="button">Print report</button></div>'
-        f'<div class="summary-grid" aria-label="Complete scan summary">{cards}</div>'
-        '<section class="panel" aria-labelledby="context-heading"><div class="section-head"><div>'
+        '<div class="summary-grid" aria-label="Complete scan summary">'
+    )
+    for label, value, note in (
+        ("Inventory records", len(records), "Complete supplied scan scope"),
+        ("Metadata parsed", summary.get("parsed", 0), "Decoded $I artifacts"),
+        ("Orphan payloads", orphan_count, "No matching metadata observed"),
+        ("Records needing review", problem_count, "Warnings, errors, or skipped items"),
+    ):
+        yield f'<div class="stat"><span class="stat-label">{label}</span><strong class="stat-value">'
+        yield from _iter_text(value)
+        yield f'</strong><span class="stat-note">{note}</span></div>'
+    yield (
+        '</div><section class="panel" aria-labelledby="context-heading"><div class="section-head"><div>'
         '<h2 id="context-heading">Run context</h2><p>Operator-supplied labels and analysis-system run times.</p></div></div>'
-        f'<dl class="context">{context}</dl></section>'
-        '<section class="panel" aria-labelledby="inventory-heading"><div class="section-head"><div>'
+        '<dl class="context">'
+    )
+    for label, value, wide in (
+        ("Case identifier", options.get("case_id") or "Not supplied", False),
+        ("Examiner label", options.get("examiner") or "Not supplied", False),
+        ("Display timezone", options.get("timezone", "UTC"), False),
+        ("Run started (UTC)", report.get("started_at_utc"), False),
+        ("Run completed (UTC)", report.get("completed_at_utc"), False),
+        ("Schema version", report.get("schema_version"), False),
+        ("Acquired input", report.get("input"), True),
+    ):
+        yield from _iter_field(label, value, wide=wide)
+    yield (
+        '</dl></section><section class="panel" aria-labelledby="inventory-heading"><div class="section-head"><div>'
         '<h2 id="inventory-heading">Artifact inventory</h2><p>Inspect original paths, deletion times, payload state, and provenance.</p></div>'
         f'<span class="tag">{len(selected)} selected / {len(records)} total</span></div>'
         f'<div class="scope"><strong>Full scan summary stays unchanged.</strong> CLI selection is {state}: '
-        f"{len(selected)} records included, {len(records) - len(selected)} excluded.{filter_note} "
-        "Browser controls affect only this inventory view; the timeline retains the CLI selection.</div>"
+        f"{len(selected)} records included, {len(records) - len(selected)} excluded."
+    )
+    if selection.get("active"):
+        yield " Applied CLI filters: "
+        separator = ""
+        for key, value in (selection.get("filters") or {}).items():
+            check_budget()
+            if value is not None and value != () and value != []:
+                yield separator
+                yield from _iter_text(f"{key}={value}")
+                separator = "; "
+        yield "."
+    yield (
+        " Browser controls affect only this inventory view; the timeline retains the CLI selection.</div>"
         '<div class="controls" role="search" aria-label="Filter artifact inventory">'
         '<div class="control"><label for="record-search">Search path, filename, or SID</label>'
         '<input id="record-search" type="search" placeholder="Search selected artifacts…" autocomplete="off"></div>'
         '<div class="control"><label for="record-kind">Record type</label><select id="record-kind"><option value="">All types</option>'
-        f"{kind_options}</select></div>"
-        '<div class="control"><label for="record-status">Status</label><select id="record-status"><option value="">All states</option>'
+    )
+    for kind in kinds:
+        yield '<option value="'
+        yield from _iter_text(kind)
+        yield '">'
+        yield from _iter_text(kind)
+        yield "</option>"
+    yield (
+        '</select></div><div class="control"><label for="record-status">Status</label><select id="record-status"><option value="">All states</option>'
         '<option value="ok">ok</option><option value="warning">warning</option><option value="error">error</option>'
         '<option value="skipped">skipped</option></select></div>'
         '<div class="control"><label for="record-sort">Sort by</label><select id="record-sort">'
@@ -403,13 +486,33 @@ def render_html(report: dict) -> str:
         f'<div class="countline" role="status" aria-live="polite"><span id="visible-count">{len(selected)}</span> visible of {len(selected)} CLI-selected records</div>'
         '<div class="table-scroll"><table aria-label="Selected artifact inventory"><thead><tr>'
         '<th scope="col">Artifact / recorded original path</th><th scope="col">Deleted (UTC)</th><th scope="col">Original bytes / orphan size</th>'
-        '<th scope="col">Payload</th><th scope="col">State</th></tr></thead>'
-        f'<tbody id="inventory-body">{rows}</tbody></table></div>'
-        f'<div id="no-visible-records" class="empty"{empty_hidden}>No records match this view. Reset browser controls or review the CLI selection.</div></section>'
-        f'<div class="two-columns">{_render_timeline(timeline)}{_render_days(timeline)}</div>'
-        f"{_render_diagnostics(records)}"
-        '<footer class="footnote"><span>Recorded artifacts support analysis; they do not establish actor, intent, authenticity, or acquisition completeness. '
-        "Preserve source bytes and corroborate findings independently.</span>"
-        f'<span class="nowrap">{_text(tool.get("name"))} {_text(tool.get("version"))} &middot; schema {_text(report.get("schema_version"))}</span></footer>'
-        f"</main><script>{_SCRIPT}</script></body></html>\n"
+        '<th scope="col">Payload</th><th scope="col">State</th></tr></thead><tbody id="inventory-body">'
     )
+    for order, record in enumerate(selected):
+        yield from _iter_record_row(record, order)
+    yield (
+        "</tbody></table></div>"
+        f'<div id="no-visible-records" class="empty"{empty_hidden}>No records match this view. Reset browser controls or review the CLI selection.</div></section>'
+        '<div class="two-columns">'
+    )
+    yield from _iter_timeline(timeline)
+    yield from _iter_days(timeline)
+    yield "</div>"
+    yield from _iter_diagnostics(records)
+    yield (
+        '<footer class="footnote"><span>Recorded artifacts support analysis; they do not establish actor, intent, authenticity, or acquisition completeness. '
+        'Preserve source bytes and corroborate findings independently.</span><span class="nowrap">'
+    )
+    yield from _iter_text(tool.get("name"))
+    yield " "
+    yield from _iter_text(tool.get("version"))
+    yield " &middot; schema "
+    yield from _iter_text(report.get("schema_version"))
+    yield f"</span></footer></main><script>{_SCRIPT}</script></body></html>\n"
+
+
+def render_html(report: dict, *, limits: WorkLimits | None = None) -> str:
+    """Return a complete bounded offline report without changing report values."""
+    from .reports import render
+
+    return render(report, "html", limits=limits)

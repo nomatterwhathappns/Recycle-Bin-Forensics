@@ -6,6 +6,8 @@ import copy
 
 import pytest
 
+from rbinforensics import analysis
+from rbinforensics import limits as limits_module
 from rbinforensics.analysis import (
     FilterOptions,
     apply_filters,
@@ -13,6 +15,7 @@ from rbinforensics.analysis import (
     selected_records,
     validate_filters,
 )
+from rbinforensics.limits import WorkLimitExceeded, WorkLimits, current_budget, operation_budget
 
 TICKS = 133_485_408_001_234_567  # 2024-01-01T00:00:00.1234567Z
 
@@ -340,3 +343,142 @@ def test_empty_timeline_has_explicit_empty_aggregates() -> None:
         "by_sid": [],
         "by_extension": [],
     }
+
+
+def test_filter_record_limit_is_checked_before_copying_inventory(
+    observations: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_copy(*args, **kwargs):
+        raise AssertionError("Oversized inventories must be rejected before copying")
+
+    monkeypatch.setattr(analysis.copy, "deepcopy", unexpected_copy)
+    with pytest.raises(WorkLimitExceeded) as stopped:
+        apply_filters(observations, FilterOptions(), limits=WorkLimits(max_records=5))
+    assert stopped.value.operation == "filter"
+    assert stopped.value.resource == "max_records"
+    assert stopped.value.observed == 6
+    assert current_budget() is None
+
+
+def test_filter_exact_record_limit_preserves_nested_isolation(observations: dict) -> None:
+    observations["options"] = {"labels": ["baseline"]}
+    observations["records"][0]["issues"] = [
+        {"code": "example", "message": "baseline", "severity": "warning"}
+    ]
+    before = copy.deepcopy(observations)
+    result = apply_filters(observations, FilterOptions(), limits=WorkLimits(max_records=6))
+    result["summary"]["parsed"] = -1
+    result["options"]["labels"].append("view")
+    result["records"][0]["issues"][0]["message"] = "view"
+    result["records"][0]["payload"]["status"] = "view"
+    result["records"][0]["metadata"]["original_path"] = "view"
+    assert observations == before
+
+
+def test_filter_does_not_copy_previous_selection_or_timeline(observations: dict) -> None:
+    class ObsoleteView:
+        def __deepcopy__(self, memo):
+            raise AssertionError("The previous derived view must not be copied")
+
+    old_selection = ObsoleteView()
+    old_timeline = ObsoleteView()
+    observations["selection"] = old_selection
+    observations["timeline"] = old_timeline
+    result = apply_filters(observations, FilterOptions(extensions=("txt",)))
+    assert result["selection"]["record_indexes"] == [1, 3]
+    assert "timeline" not in result
+    assert observations["selection"] is old_selection
+    assert observations["timeline"] is old_timeline
+    result["timeline"] = build_timeline(selected_records(result))
+    assert len(result["timeline"]["events"]) == 1
+
+
+def test_filter_deadline_after_record_copy_leaves_baseline_unchanged(
+    observations: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = copy.deepcopy(observations)
+    clock = [0.0]
+    monkeypatch.setattr(limits_module, "monotonic", lambda: clock[0])
+    original_copy = copy.deepcopy
+
+    def slow_copy(value, *args, **kwargs):
+        result = original_copy(value, *args, **kwargs)
+        if value is observations["records"][0]:
+            clock[0] = 2.0
+        return result
+
+    monkeypatch.setattr(analysis.copy, "deepcopy", slow_copy)
+    with pytest.raises(WorkLimitExceeded) as stopped:
+        apply_filters(observations, FilterOptions(), limits=WorkLimits(max_operation_seconds=1))
+    assert stopped.value.resource == "max_operation_seconds"
+    assert observations == before
+    assert current_budget() is None
+    assert build_timeline(observations["records"])["events"]
+
+
+@pytest.mark.parametrize("operation", ["filter", "timeline"])
+def test_analysis_reuses_outer_operation_limits(observations: dict, operation: str) -> None:
+    with operation_budget(WorkLimits(max_records=5), operation="scan") as outer:
+        with pytest.raises(WorkLimitExceeded) as stopped:
+            if operation == "filter":
+                apply_filters(observations, FilterOptions(), limits=WorkLimits(max_records=6))
+            else:
+                build_timeline(observations["records"], limits=WorkLimits(max_records=6))
+        assert stopped.value.operation == "scan"
+        assert stopped.value.resource == "max_records"
+        assert current_budget() is outer
+    assert current_budget() is None
+
+
+def test_timeline_record_limit_counts_undated_inputs(observations: dict) -> None:
+    before = copy.deepcopy(observations)
+    with pytest.raises(WorkLimitExceeded) as stopped:
+        build_timeline(observations["records"], limits=WorkLimits(max_records=5))
+    assert stopped.value.operation == "timeline"
+    assert stopped.value.observed == 6
+    assert observations == before
+    result = build_timeline(observations["records"], limits=WorkLimits(max_records=6))
+    assert result["undated_records"] == 4
+
+
+def test_timeline_checks_deadline_after_sort_without_mutating_records(
+    observations: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(limits_module, "monotonic", lambda: clock[0])
+
+    class SlowPath(str):
+        def __lt__(self, other):
+            clock[0] = 2.0
+            return super().__lt__(other)
+
+    first = record("$IB.pdf")
+    first["source_path"] = SlowPath(first["source_path"])
+    second = record("$IA.pdf")
+    second["source_path"] = SlowPath(second["source_path"])
+    records = [first, second]
+    before = copy.deepcopy(records)
+    with pytest.raises(WorkLimitExceeded) as stopped:
+        build_timeline(records, limits=WorkLimits(max_operation_seconds=1))
+    assert stopped.value.resource == "max_operation_seconds"
+    assert records == before
+    assert current_budget() is None
+
+
+def test_timeline_checks_deadline_between_records(
+    observations: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = copy.deepcopy(observations)
+    clock = [0.0]
+    monkeypatch.setattr(limits_module, "monotonic", lambda: clock[0])
+    parse_instant = analysis._instant_ticks
+
+    def slow_instant(value):
+        result = parse_instant(value)
+        clock[0] = 2.0
+        return result
+
+    monkeypatch.setattr(analysis, "_instant_ticks", slow_instant)
+    with pytest.raises(WorkLimitExceeded, match="timeline incomplete"):
+        build_timeline(observations["records"], limits=WorkLimits(max_operation_seconds=1))
+    assert observations == before

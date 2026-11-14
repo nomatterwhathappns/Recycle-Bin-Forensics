@@ -844,6 +844,95 @@ def _leave_result(app, action):
         app._on_close()
 
 
+def test_scan_limit_is_explicitly_incomplete_and_cannot_export(app, evidence):
+    _item(evidence, "SECOND.txt", r"C:\Other\second.txt")
+    app.limit_vars["max_records"].set("1")
+    app.source_var.set(str(evidence))
+    app.start_scan()
+    _pump(app, lambda: app.session.state == "limited" and not app._awaiting_terminal)
+    assert app.session.report is None and app.session.view is None
+    assert not app.session.has_unsaved_report
+    assert not app.inventory.get_children()
+    assert "belum lengkap" in app.status_var.get()
+    assert all(button.instate(("disabled",)) for button in app.export_buttons)
+    assert app.start_button.instate(("!disabled",))
+
+
+def test_limited_filter_keeps_previous_inventory_and_unsaved_state(app, evidence):
+    _item(evidence, "SECOND.txt", r"C:\Other\second.txt")
+    _scan(app, evidence, count=2)
+    baseline, previous = app.session.report, app.session.view
+    rows = app.inventory.get_children()
+    app.limit_vars["max_records"].set("1")
+    app.extension_var.set(".pdf")
+    app.apply_filters()
+    _pump(app, lambda: app.session.state == "complete" and not app._awaiting_terminal)
+    assert app.session.report is baseline and app.session.view is previous
+    assert app.session.has_unsaved_report
+    assert app.inventory.get_children() == rows
+    assert "belum lengkap" in app.status_var.get()
+
+
+def test_limited_export_preserves_unsaved_result_and_removes_partial_file(app, evidence, tmp_path):
+    _scan(app, evidence)
+    baseline = app.session.report
+    target = tmp_path.resolve() / "limited.json"
+    app.limit_vars["max_export_bytes"].set("32")
+    assert app.export_report("json", target)
+    _pump(app, lambda: app.session.state == "complete" and not app._awaiting_terminal)
+    assert not target.exists()
+    assert app.session.report is baseline and app.session.has_unsaved_report
+    assert app._deferred_action is None
+    assert "belum lengkap" in app.status_var.get()
+    app.limit_vars["max_export_bytes"].set(str(128 * 1024**2))
+    assert app.export_report("json", target)
+    _pump(app, lambda: app._last_export == target and not app._worker_running())
+    assert not app.session.has_unsaved_report
+
+
+def test_invalid_budget_preserves_result_and_does_not_show_discard_prompt(
+    app, evidence, monkeypatch
+):
+    _scan(app, evidence)
+    baseline = app.session.report
+    prompts = _guard_choice(app, monkeypatch, "discard")
+    app.limit_vars["max_operation_seconds"].set("nan")
+    app.start_scan()
+    assert not prompts
+    assert app.session.report is baseline and app.session.has_unsaved_report
+    assert app._test_dialogs
+
+
+def test_sort_limit_preserves_order_selection_and_heading(app, evidence):
+    _item(evidence, "SECOND.txt", r"C:\Other\second.txt")
+    _scan(app, evidence, count=2)
+    _select(app, app.inventory)
+    rows = app.inventory.get_children()
+    selected = app.inventory.selection()
+    heading = app.inventory.heading("path", "text")
+    app.limit_vars["max_records"].set("1")
+    app.sort_table(app.inventory, "path")
+    assert app.inventory.get_children() == rows
+    assert app.inventory.selection() == selected
+    assert app.inventory.heading("path", "text") == heading
+    assert app._test_dialogs
+
+
+def test_budget_controls_can_fold_and_retain_values_at_small_window(app):
+    app.geometry("1000x700")
+    app.limit_vars["max_records"].set("25000")
+    app.limits_visible.set(True)
+    app._toggle_limits()
+    app.update()
+    assert app.limits_fields.winfo_ismapped()
+    assert app._limits().max_records == 25000
+    app.limits_visible.set(False)
+    app._toggle_limits()
+    app.update()
+    assert not app.limits_fields.winfo_ismapped()
+    assert app._limits().max_records == 25000
+
+
 @pytest.mark.parametrize("action", ["scan", "close"])
 @pytest.mark.parametrize("choice", ["cancel", "discard"])
 def test_unsaved_result_cancel_preserves_and_discard_continues(
