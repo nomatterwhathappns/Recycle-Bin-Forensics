@@ -1,0 +1,771 @@
+{
+  "schema_version": "1.0",
+  "report_kind": "benchmark",
+  "status": "completed",
+  "application_version": "1.7.1",
+  "source_commit": "cd374eea71ea0c83a1cc3963eab8b039cf7a1f9a",
+  "source_tree_dirty": false,
+  "created_at_utc": "2026-11-14T18:33:47.332212+00:00",
+  "environment": {
+    "application_version": "1.7.1",
+    "python": "3.13.5",
+    "implementation": "CPython",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cpu_count": 3,
+    "filesystem_block_size": 4096,
+    "storage_scope": "Generated local small files; backing media and filesystem caches uncontrolled"
+  },
+  "method": {
+    "timing": "perf_counter; scan only; generation/import/startup/validation excluded",
+    "gui_timing": "start_scan through completed first-page load; synchronous sort/page separately",
+    "memory": "Fresh child process resident high-water includes imports/report validation; not a scan-only delta",
+    "cache": "No OS cache flush; generated files and repeated scans generally warm caches",
+    "throughput": "End-to-end logical bytes/time, including metadata/discovery work; not disk bandwidth",
+    "gui_heartbeat": "10ms Tk timer; gaps include scheduling/painting/worker contention; 30ms settling captured outside elapsed timing",
+    "repeats": 3,
+    "worker_timeout_seconds": 600.0
+  },
+  "workloads": [
+    {
+      "metadata_count": 1000,
+      "payload_count": 1000,
+      "payload_size_bytes": 64,
+      "logical_metadata_bytes": 327000,
+      "logical_payload_bytes": 64000,
+      "versions": {
+        "1": 500,
+        "2": 500
+      },
+      "generation_seconds": 0.11174562200176297
+    },
+    {
+      "metadata_count": 10000,
+      "payload_count": 10000,
+      "payload_size_bytes": 64,
+      "logical_metadata_bytes": 3270000,
+      "logical_payload_bytes": 640000,
+      "versions": {
+        "1": 5000,
+        "2": 5000
+      },
+      "generation_seconds": 0.8090450550007517
+    },
+    {
+      "metadata_count": 100000,
+      "payload_count": 100000,
+      "payload_size_bytes": 64,
+      "logical_metadata_bytes": 32700000,
+      "logical_payload_bytes": 6400000,
+      "versions": {
+        "1": 50000,
+        "2": 50000
+      },
+      "generation_seconds": 10.377194505999796
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": false,
+      "elapsed_seconds": 0.16746128700469853,
+      "process_cpu_seconds": 0.167375871,
+      "metadata_per_second": 5971.529407700913,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 23838720,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": true,
+      "elapsed_seconds": 0.23896634300035657,
+      "process_cpu_seconds": 0.238815973,
+      "metadata_per_second": 4184.689724270115,
+      "end_to_end_payload_bytes_per_second": 267820.1423532874,
+      "peak_resident_bytes": 23961600,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "gui",
+      "count": 1000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.1898025369955576,
+      "scan_and_first_page": {
+        "elapsed_seconds": 0.23762660099600907,
+        "heartbeat": {
+          "samples": 17,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 11.045372004446108,
+          "p95_gap_ms": 62.96364100126084,
+          "max_gap_ms": 62.96364100126084,
+          "max_lateness_ms": 52.96364100126084
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.004931431001750752,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.054791004222352,
+          "p95_gap_ms": 10.636286002409179,
+          "max_gap_ms": 10.636286002409179,
+          "max_lateness_ms": 0.6362860024091788
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.0036438930037547834,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.155112999200355,
+          "p95_gap_ms": 10.535993998928461,
+          "max_gap_ms": 10.535993998928461,
+          "max_lateness_ms": 0.5359939989284612
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 39096320,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": false,
+      "elapsed_seconds": 0.17002646699984325,
+      "process_cpu_seconds": 0.170029727,
+      "metadata_per_second": 5881.437270592242,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 23838720,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": true,
+      "elapsed_seconds": 0.24327803100459278,
+      "process_cpu_seconds": 0.24229371700000002,
+      "metadata_per_second": 4110.523239071765,
+      "end_to_end_payload_bytes_per_second": 263073.48730059294,
+      "peak_resident_bytes": 23965696,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "gui",
+      "count": 1000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.19339008600218222,
+      "scan_and_first_page": {
+        "elapsed_seconds": 0.2721466699949815,
+        "heartbeat": {
+          "samples": 18,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.982195995893562,
+          "p95_gap_ms": 88.44459299871232,
+          "max_gap_ms": 88.44459299871232,
+          "max_lateness_ms": 78.44459299871232
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.004020640000817366,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.022771995863877,
+          "p95_gap_ms": 10.762507001345512,
+          "max_gap_ms": 10.762507001345512,
+          "max_lateness_ms": 0.7625070013455115
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.0032724839984439313,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.385238005255815,
+          "p95_gap_ms": 10.495144997548778,
+          "max_gap_ms": 10.495144997548778,
+          "max_lateness_ms": 0.4951449975487776
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 39227392,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": false,
+      "elapsed_seconds": 0.15183091499784496,
+      "process_cpu_seconds": 0.15179024700000002,
+      "metadata_per_second": 6586.273948320694,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 23838720,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 1000,
+      "hash_payload": true,
+      "elapsed_seconds": 0.23396992399648298,
+      "process_cpu_seconds": 0.233938909,
+      "metadata_per_second": 4274.053617314642,
+      "end_to_end_payload_bytes_per_second": 273539.4315081371,
+      "peak_resident_bytes": 23961600,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "gui",
+      "count": 1000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.18131124899809947,
+      "scan_and_first_page": {
+        "elapsed_seconds": 0.23494838599435752,
+        "heartbeat": {
+          "samples": 18,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.619936500006588,
+          "p95_gap_ms": 61.15411800419679,
+          "max_gap_ms": 61.15411800419679,
+          "max_lateness_ms": 51.15411800419679
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.0040901749962358736,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.640833002980798,
+          "p95_gap_ms": 10.927224000624847,
+          "max_gap_ms": 10.927224000624847,
+          "max_lateness_ms": 0.9272240006248467
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.003547678999893833,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.397978003311437,
+          "p95_gap_ms": 10.485448998224456,
+          "max_gap_ms": 10.485448998224456,
+          "max_lateness_ms": 0.48544899822445586
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 39227392,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": false,
+      "elapsed_seconds": 1.7957480990007753,
+      "process_cpu_seconds": 1.7953223,
+      "metadata_per_second": 5568.709779263802,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 72699904,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": true,
+      "elapsed_seconds": 2.2184842619972187,
+      "process_cpu_seconds": 2.213435256,
+      "metadata_per_second": 4507.582123209372,
+      "end_to_end_payload_bytes_per_second": 288485.2558853998,
+      "peak_resident_bytes": 73674752,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "gui",
+      "count": 10000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.16823245999694336,
+      "scan_and_first_page": {
+        "elapsed_seconds": 2.1147909770006663,
+        "heartbeat": {
+          "samples": 152,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.758429500128841,
+          "p95_gap_ms": 21.887572002015077,
+          "max_gap_ms": 193.56834499922115,
+          "max_lateness_ms": 183.56834499922115
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.007582900005218107,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.440960002597421,
+          "p95_gap_ms": 10.55532099417178,
+          "max_gap_ms": 10.55532099417178,
+          "max_lateness_ms": 0.5553209941717796
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.0030654729998786934,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.033006001322065,
+          "p95_gap_ms": 11.109805003798101,
+          "max_gap_ms": 11.109805003798101,
+          "max_lateness_ms": 1.109805003798101
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 90263552,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": false,
+      "elapsed_seconds": 1.70619355099916,
+      "process_cpu_seconds": 1.70128327,
+      "metadata_per_second": 5860.9997641498085,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 72671232,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": true,
+      "elapsed_seconds": 2.2311235449960805,
+      "process_cpu_seconds": 2.221552221,
+      "metadata_per_second": 4482.046734896327,
+      "end_to_end_payload_bytes_per_second": 286850.9910333649,
+      "peak_resident_bytes": 73887744,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "gui",
+      "count": 10000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.19598186599614564,
+      "scan_and_first_page": {
+        "elapsed_seconds": 1.980670443001145,
+        "heartbeat": {
+          "samples": 147,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.956137004541233,
+          "p95_gap_ms": 20.563131998642348,
+          "max_gap_ms": 195.04159200005233,
+          "max_lateness_ms": 185.04159200005233
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.008336955994309392,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.030732999439351,
+          "p95_gap_ms": 10.399062994110864,
+          "max_gap_ms": 10.399062994110864,
+          "max_lateness_ms": 0.39906299411086366
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.003249460001825355,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.883527000260074,
+          "p95_gap_ms": 11.014413998054806,
+          "max_gap_ms": 11.014413998054806,
+          "max_lateness_ms": 1.0144139980548061
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 89743360,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": false,
+      "elapsed_seconds": 1.579952697000408,
+      "process_cpu_seconds": 1.576573475,
+      "metadata_per_second": 6329.303414580277,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 72708096,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 10000,
+      "hash_payload": true,
+      "elapsed_seconds": 2.26591886299866,
+      "process_cpu_seconds": 2.2649697,
+      "metadata_per_second": 4413.220686448698,
+      "end_to_end_payload_bytes_per_second": 282446.12393271667,
+      "peak_resident_bytes": 73908224,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "gui",
+      "count": 10000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.19133124099607812,
+      "scan_and_first_page": {
+        "elapsed_seconds": 2.0833907289998024,
+        "heartbeat": {
+          "samples": 145,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.907623996899929,
+          "p95_gap_ms": 23.1998899980681,
+          "max_gap_ms": 197.66087100288132,
+          "max_lateness_ms": 187.66087100288132
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.009253655000065919,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.066147006000392,
+          "p95_gap_ms": 10.754332994110882,
+          "max_gap_ms": 10.754332994110882,
+          "max_lateness_ms": 0.7543329941108823
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.005404272000305355,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.164414998143911,
+          "p95_gap_ms": 10.881934998906218,
+          "max_gap_ms": 10.881934998906218,
+          "max_lateness_ms": 0.8819349989062175
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 90386432,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": false,
+      "elapsed_seconds": 19.114606572999037,
+      "process_cpu_seconds": 19.085571755,
+      "metadata_per_second": 5231.601268804468,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 556171264,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": true,
+      "elapsed_seconds": 23.046549446000427,
+      "process_cpu_seconds": 23.025154610999998,
+      "metadata_per_second": 4339.044343028727,
+      "end_to_end_payload_bytes_per_second": 277698.8379538385,
+      "peak_resident_bytes": 572624896,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "gui",
+      "count": 100000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.19857482699444517,
+      "scan_and_first_page": {
+        "elapsed_seconds": 21.550754003001202,
+        "heartbeat": {
+          "samples": 1397,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.990227005095221,
+          "p95_gap_ms": 18.691705998207908,
+          "max_gap_ms": 636.9949630025076,
+          "max_lateness_ms": 626.9949630025076
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.07203424299950711,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 11.021204001735896,
+          "p95_gap_ms": 72.11858999653487,
+          "max_gap_ms": 72.11858999653487,
+          "max_lateness_ms": 62.118589996534865
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.0032587530004093423,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.380079002061393,
+          "p95_gap_ms": 10.604217000945937,
+          "max_gap_ms": 10.604217000945937,
+          "max_lateness_ms": 0.6042170009459369
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 606715904,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": false,
+      "elapsed_seconds": 17.144478341004287,
+      "process_cpu_seconds": 17.129879685,
+      "metadata_per_second": 5832.781727795762,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 556204032,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": true,
+      "elapsed_seconds": 23.955560682006762,
+      "process_cpu_seconds": 23.913215206,
+      "metadata_per_second": 4174.396138225681,
+      "end_to_end_payload_bytes_per_second": 267161.3528464436,
+      "peak_resident_bytes": 572792832,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "gui",
+      "count": 100000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.1759137820044998,
+      "scan_and_first_page": {
+        "elapsed_seconds": 21.987803493000683,
+        "heartbeat": {
+          "samples": 1469,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.926802002359182,
+          "p95_gap_ms": 18.139204003091436,
+          "max_gap_ms": 566.9241650030017,
+          "max_lateness_ms": 556.9241650030017
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.0943563999971957,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.304394992999732,
+          "p95_gap_ms": 94.44526300649159,
+          "max_gap_ms": 94.44526300649159,
+          "max_lateness_ms": 84.44526300649159
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.003796662000240758,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.667702001228463,
+          "p95_gap_ms": 10.821582996868528,
+          "max_gap_ms": 10.821582996868528,
+          "max_lateness_ms": 0.8215829968685284
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 606728192,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": false,
+      "elapsed_seconds": 18.345615622994956,
+      "process_cpu_seconds": 18.319667871999997,
+      "metadata_per_second": 5450.893666095181,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 560766976,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 100000,
+      "hash_payload": true,
+      "elapsed_seconds": 22.994792403995234,
+      "process_cpu_seconds": 22.968798433,
+      "metadata_per_second": 4348.810732582456,
+      "end_to_end_payload_bytes_per_second": 278323.88688527717,
+      "peak_resident_bytes": 572637184,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "gui",
+      "count": 100000,
+      "geometry": "1000x700",
+      "tk_patchlevel": "8.6.16",
+      "startup_seconds": 0.1834495259972755,
+      "scan_and_first_page": {
+        "elapsed_seconds": 21.210826907998126,
+        "heartbeat": {
+          "samples": 1423,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.961633997794706,
+          "p95_gap_ms": 18.501477999961935,
+          "max_gap_ms": 538.6027900021872,
+          "max_lateness_ms": 528.6027900021872
+        }
+      },
+      "sort_path_ascending": {
+        "elapsed_seconds": 0.08179293099965435,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 11.105009994935244,
+          "p95_gap_ms": 81.89912099624053,
+          "max_gap_ms": 81.89912099624053,
+          "max_lateness_ms": 71.89912099624053
+        }
+      },
+      "next_page": {
+        "elapsed_seconds": 0.0036522249938570894,
+        "heartbeat": {
+          "samples": 3,
+          "requested_interval_ms": 10,
+          "median_gap_ms": 10.214168003585655,
+          "p95_gap_ms": 10.894082995946519,
+          "max_gap_ms": 10.894082995946519,
+          "max_lateness_ms": 0.8940829959465191
+        }
+      },
+      "visible_rows_first_page": 200,
+      "peak_resident_bytes": 602230784,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    }
+  ],
+  "summary": [
+    {
+      "count": 1000,
+      "hash_payload": false,
+      "repeats": 3,
+      "min_elapsed_seconds": 0.15183091499784496,
+      "median_elapsed_seconds": 0.16746128700469853,
+      "max_elapsed_seconds": 0.17002646699984325,
+      "median_metadata_per_second": 5971.529407700913,
+      "max_peak_resident_bytes": 23838720
+    },
+    {
+      "count": 1000,
+      "hash_payload": true,
+      "repeats": 3,
+      "min_elapsed_seconds": 0.23396992399648298,
+      "median_elapsed_seconds": 0.23896634300035657,
+      "max_elapsed_seconds": 0.24327803100459278,
+      "median_metadata_per_second": 4184.689724270115,
+      "max_peak_resident_bytes": 23965696
+    },
+    {
+      "count": 10000,
+      "hash_payload": false,
+      "repeats": 3,
+      "min_elapsed_seconds": 1.579952697000408,
+      "median_elapsed_seconds": 1.70619355099916,
+      "max_elapsed_seconds": 1.7957480990007753,
+      "median_metadata_per_second": 5860.9997641498085,
+      "max_peak_resident_bytes": 72708096
+    },
+    {
+      "count": 10000,
+      "hash_payload": true,
+      "repeats": 3,
+      "min_elapsed_seconds": 2.2184842619972187,
+      "median_elapsed_seconds": 2.2311235449960805,
+      "max_elapsed_seconds": 2.26591886299866,
+      "median_metadata_per_second": 4482.046734896327,
+      "max_peak_resident_bytes": 73908224
+    },
+    {
+      "count": 100000,
+      "hash_payload": false,
+      "repeats": 3,
+      "min_elapsed_seconds": 17.144478341004287,
+      "median_elapsed_seconds": 18.345615622994956,
+      "max_elapsed_seconds": 19.114606572999037,
+      "median_metadata_per_second": 5450.893666095181,
+      "max_peak_resident_bytes": 560766976
+    },
+    {
+      "count": 100000,
+      "hash_payload": true,
+      "repeats": 3,
+      "min_elapsed_seconds": 22.994792403995234,
+      "median_elapsed_seconds": 23.046549446000427,
+      "max_elapsed_seconds": 23.955560682006762,
+      "median_metadata_per_second": 4339.044343028727,
+      "max_peak_resident_bytes": 572792832
+    }
+  ]
+}

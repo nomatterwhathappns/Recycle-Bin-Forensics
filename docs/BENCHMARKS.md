@@ -16,6 +16,8 @@ Choose a new output filename for each run. The parent directory and `--work-dir`
 
 For the larger workload, add `100000` to `--counts`. Each item creates two small files. Filesystem allocation usually exceeds their logical byte sizes, so 100,000 pairs can occupy hundreds of megabytes. Generation and cleanup can take longer than the scan itself on some filesystems.
 
+The benchmark uses the application's default workload limits. A 100,000-pair workload reaches the default 100,000-record cap; each paired payload belongs to its metadata record. The tool does not expose workload-limit overrides. Its `--timeout` controls each child measurement separately from the application's default 600-second cooperative operation deadline.
+
 On a graphical machine with working Tk, add `--gui`:
 
 ```sh
@@ -75,7 +77,29 @@ No OS cache flush is performed. Generation and repeated reads generally warm fil
 
 Use at least three repeats for comparative statements. Compare the same application version, payload size, counts, Python/Tk versions, cache method, and storage conditions. A managed cloud host or virtual display is useful for reproducibility but does not predict every Parrot laptop or Windows workstation. Published JSON reports and a short explanation of their tested scope belong alongside release notes.
 
-## Recorded 1.3.0 measurements
+## Recorded 1.7.1 measurements
+
+These measurements used CPython 3.13.5 on Linux 6.18.57 x86_64, an AMD EPYC 9V74 host exposing three logical CPUs, and native Tk 8.6.16 under a virtual display. Each count used three repeats and generated 64-byte payloads. Both reports record clean source commit `cd374eea71ea0c83a1cc3963eab8b039cf7a1f9a`, application version 1.7.1, and completed, validated measurements. [Raw main report](results/benchmark-1.7.1.json).
+
+| Metadata records | Median scan, hash off (s) | Median scan, hash on (s) | Highest scan-process RSS (MiB) |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 0.167 | 0.239 | 22.9 |
+| 10,000 | 1.706 | 2.231 | 70.5 |
+| 100,000 | 18.346 | 23.047 | 546.3 |
+
+| Metadata records | Median GUI scan + first page (s) | Median sort handler (ms) | Median next-page handler (ms) | Highest GUI-process RSS (MiB) | Longest observed scan/load heartbeat gap (ms) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 0.238 | 4.1 | 3.5 | 37.4 | 88.4 |
+| 10,000 | 2.083 | 8.3 | 3.2 | 86.2 | 197.7 |
+| 100,000 | 21.551 | 81.8 | 3.7 | 578.6 | 637.0 |
+
+Median GUI startup ranged from 0.183 to 0.191 seconds across the three counts. At 100,000 records, the longest observed scan/load callback gap was about 0.64 seconds; the longest observed sort callback gap was 94.4 ms. Pagination limits the visible first page to 200 rows while the complete inventory remains in memory. These observations do not establish continuously responsive interaction at that scale or a universal RAM ceiling.
+
+The separate [large-payload report](results/benchmark-large-payload-1.7.1.json) used 100 files of 1 MiB each, three repeats, and no GUI. Median scan time was 0.018 s without hashing and 0.121 s with hashing, corresponding to about 828 MiB/s median logical payload throughput during the complete hashed scan. The large-payload run finished before the main run; they did not execute concurrently. Both reports were written under ignored `work` before their copies and this documentation were added, retaining the clean measured-source provenance.
+
+These generated workloads use generally warm, uncontrolled filesystem caches. Logical throughput is not cold-device bandwidth. Scan and GUI timings exclude JSON/CSV/HTML serialization, manifests, redaction, and export writes. They do not cover every evidence distribution, storage device, host load, Python/Tk version, or larger payload workload. The historical 1.3.0 measurements below used different Python/Tk versions and are retained as observations of that environment; these tables do not isolate application-version performance differences.
+
+## Historical 1.3.0 measurements
 
 These actual measurements used CPython 3.12.14 on Linux x86_64, an AMD EPYC 9V74 host exposing three logical CPUs, and Tk 9.0.4 under a virtual display. Each count used three repeats, generated 64-byte payloads, and generally warm/uncontrolled filesystem caches. [Raw report](results/benchmark-1.3.0.json).
 

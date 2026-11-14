@@ -1,0 +1,146 @@
+{
+  "schema_version": "1.0",
+  "report_kind": "benchmark",
+  "status": "completed",
+  "application_version": "1.7.1",
+  "source_commit": "cd374eea71ea0c83a1cc3963eab8b039cf7a1f9a",
+  "source_tree_dirty": false,
+  "created_at_utc": "2026-11-14T18:29:46.194176+00:00",
+  "environment": {
+    "application_version": "1.7.1",
+    "python": "3.13.5",
+    "implementation": "CPython",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cpu_count": 3,
+    "filesystem_block_size": 4096,
+    "storage_scope": "Generated local small files; backing media and filesystem caches uncontrolled"
+  },
+  "method": {
+    "timing": "perf_counter; scan only; generation/import/startup/validation excluded",
+    "gui_timing": "start_scan through completed first-page load; synchronous sort/page separately",
+    "memory": "Fresh child process resident high-water includes imports/report validation; not a scan-only delta",
+    "cache": "No OS cache flush; generated files and repeated scans generally warm caches",
+    "throughput": "End-to-end logical bytes/time, including metadata/discovery work; not disk bandwidth",
+    "gui_heartbeat": "10ms Tk timer; gaps include scheduling/painting/worker contention; 30ms settling captured outside elapsed timing",
+    "repeats": 3,
+    "worker_timeout_seconds": 300.0
+  },
+  "workloads": [
+    {
+      "metadata_count": 100,
+      "payload_count": 100,
+      "payload_size_bytes": 1048576,
+      "logical_metadata_bytes": 32700,
+      "logical_payload_bytes": 104857600,
+      "versions": {
+        "1": 50,
+        "2": 50
+      },
+      "generation_seconds": 0.5867854020034429
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": false,
+      "elapsed_seconds": 0.0211190570043982,
+      "process_cpu_seconds": 0.021125741000000003,
+      "metadata_per_second": 4735.059902493481,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 20164608,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": true,
+      "elapsed_seconds": 0.11904594099905808,
+      "process_cpu_seconds": 0.11889991899999999,
+      "metadata_per_second": 840.011840477545,
+      "end_to_end_payload_bytes_per_second": 880816255.6405822,
+      "peak_resident_bytes": 20987904,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 1
+    },
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": false,
+      "elapsed_seconds": 0.017244334005226847,
+      "process_cpu_seconds": 0.017249593000000008,
+      "metadata_per_second": 5799.0062109496075,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 20164608,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": true,
+      "elapsed_seconds": 0.12175925500196172,
+      "process_cpu_seconds": 0.121326666,
+      "metadata_per_second": 821.2928043818013,
+      "end_to_end_payload_bytes_per_second": 861187923.6474516,
+      "peak_resident_bytes": 20987904,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 2
+    },
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": false,
+      "elapsed_seconds": 0.017977187999349553,
+      "process_cpu_seconds": 0.017983209999999993,
+      "metadata_per_second": 5562.605230785714,
+      "end_to_end_payload_bytes_per_second": null,
+      "peak_resident_bytes": 20164608,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    },
+    {
+      "kind": "scan",
+      "count": 100,
+      "hash_payload": true,
+      "elapsed_seconds": 0.12081945299723884,
+      "process_cpu_seconds": 0.12038138500000001,
+      "metadata_per_second": 827.6812840916053,
+      "end_to_end_payload_bytes_per_second": 867886730.1476392,
+      "peak_resident_bytes": 20987904,
+      "memory_method": "getrusage ru_maxrss (Linux KiB converted to bytes)",
+      "validated": true,
+      "repeat": 3
+    }
+  ],
+  "summary": [
+    {
+      "count": 100,
+      "hash_payload": false,
+      "repeats": 3,
+      "min_elapsed_seconds": 0.017244334005226847,
+      "median_elapsed_seconds": 0.017977187999349553,
+      "max_elapsed_seconds": 0.0211190570043982,
+      "median_metadata_per_second": 5562.605230785714,
+      "max_peak_resident_bytes": 20164608
+    },
+    {
+      "count": 100,
+      "hash_payload": true,
+      "repeats": 3,
+      "min_elapsed_seconds": 0.11904594099905808,
+      "median_elapsed_seconds": 0.12081945299723884,
+      "max_elapsed_seconds": 0.12175925500196172,
+      "median_metadata_per_second": 827.6812840916053,
+      "max_peak_resident_bytes": 20987904
+    }
+  ]
+}
