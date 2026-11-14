@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.1
+
+### Fixed
+
+- Correct the obsolete `0.1.x` security support policy to the maintained `1.7.x` line and state that older lines do not receive promised backports.
+- Document private exports, sharing derivatives, checksum trust, and resource limits consistently with the current application.
+
+### Changed
+
+- Application/package version is `1.7.1`; runtime features and report contracts are unchanged from `1.7.0`.
+
 ## 1.7.0
 
 ### Added

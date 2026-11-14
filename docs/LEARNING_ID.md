@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.7.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.7.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.7.1**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.7.1` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
@@ -651,3 +651,9 @@ JSON lengkap tetap schema `2.0`; manifest memiliki kontrak terpisah `1.0`. JSON 
 `output.write_report()` tetap memeriksa tujuan terhadap lokasi bukti asli sebelum membentuk turunan. Manifest dibuat dari data turunan yang sudah disamarkan. SHA-256 pada manifest mengidentifikasi file ekspor, sedangkan hash bukti asli ditahan dari salinan. `DesktopSession` hanya mengakui penyimpanan analisis ketika ekspor JSON biasa beserta manifest berhasil.
 
 File POSIX dibuat langsung dengan mode `0600`, bukan baru dibatasi setelah isinya ditulis. Windows mengikuti ACL folder tujuan. Salinan tersamarkan mengurangi identitas, tetapi waktu, ukuran, dan nama file tujuan yang dipilih pengguna masih perlu ditinjau sebelum dibagikan.
+
+## 34. Kebijakan versi dan dukungan
+
+Penambahan fitur memakai versi minor (`1.6.0`, `1.7.0`), sedangkan perbaikan bug atau dokumentasi memakai patch (`1.6.1`, `1.7.1`). Setiap tahap disimpan sebagai commit tersendiri agar perubahan bisa dibandingkan atau ditelusuri. Versi aplikasi tidak sama dengan versi kontrak data: JSON lengkap tetap `2.0`, manifest `1.0`, dan salinan tersamarkan `sharing-1.0`.
+
+`SECURITY.md` menyatakan lini yang dipelihara dan cara melapor tanpa membocorkan data kasus. CI hijau adalah bukti bahwa pemeriksaan yang tercantum lulus pada commit tersebut; itu bukan jaminan tidak ada bug. Perbaikan harus tetap disertai kasus uji yang dapat mengulang masalahnya.
