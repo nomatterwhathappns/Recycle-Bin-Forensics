@@ -1,6 +1,6 @@
 # Memahami Recycle Bin Forensics dari byte sampai laporan
 
-Panduan ini menjelaskan Recycle Bin Forensics **1.3.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.3.0` berbeda dari versi kontrak laporan JSON `2.0`.
+Panduan ini menjelaskan Recycle Bin Forensics **1.4.0**: masalah yang diselesaikan, teknologi yang digunakan, kode yang menentukan hasil, dan cara menafsirkan temuan. Contoh path, pengguna, dan kasus di sini fiktif. Versi aplikasi `1.4.0` berbeda dari versi kontrak laporan JSON `2.0`.
 
 ## 1. Apa yang sebenarnya kita buat?
 
@@ -621,3 +621,9 @@ Versi 1.3 menambahkan corpus sintetis, pembandingan parser independen, benchmark
 [`tools/benchmark.py`](../tools/benchmark.py) mengukur scan, pengaruh hashing, puncak memori proses, dan operasi GUI pada workload yang didefinisikan. Waktu membuat dataset dipisahkan. Cache tidak dikosongkan, sehingga angka ini bukan jaminan performa cold disk. Timer GUI mencatat jeda callback yang benar-benar diamati; jeda panjang perlu dibaca bersama beban, hardware, dan operasi yang sedang berjalan. Lihat [metode benchmark](BENCHMARKS.md).
 
 [`tools/prepare_release.py`](../tools/prepare_release.py) mengikat paket Windows pada versi dan commit, memeriksa hasil smoke test, membuat ZIP dataset, lalu menghitung checksum setiap aset. Workflow rilis menunggu pengujian, mengunggah draft, mengunduh kembali aset, memverifikasi checksum, kemudian memublikasikannya. Hash membuktikan kesamaan byte terhadap checksum yang dipilih; hash tidak menggantikan tanda tangan penerbit. Lihat [alur rilis](RELEASES.md).
+
+## 30. Melindungi analisis yang belum disimpan
+
+`DesktopSession.has_unsaved_report` mengikat status penyimpanan kepada identitas analisis, bukan baris yang sedang dipilih atau halaman tabel. Analisis kosong yang selesai juga merupakan hasil yang bisa disimpan. Filter mempertahankan inventaris penuh, dan ekspor JSON menyimpan seluruh record meskipun selection-nya dipersempit. CSV/HTML adalah tampilan pilihan, sehingga keberhasilan menulis keduanya tidak menganggap seluruh inventaris audit sudah disimpan.
+
+Dialog sebelum scan berikutnya atau penutupan menyediakan Simpan JSON, Buang hasil, dan Batal. Aksi lanjutan ditunda selama ekspor JSON berjalan. Membatalkan pemilih file, gagal membuka tujuan, atau gagal menulis tidak boleh memulai scan berikutnya maupun menutup jendela. Penanda tersimpan berubah hanya setelah writer berhasil, untuk analisis yang memang diekspor.

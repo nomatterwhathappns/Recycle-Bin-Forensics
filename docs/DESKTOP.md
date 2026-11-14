@@ -1,6 +1,6 @@
 # Desktop user guide
 
-Recycle Bin Forensics 1.3.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
+Recycle Bin Forensics 1.4.0 provides a local Tk desktop interface to the same engine used by `rbf scan`. The interface labels are in Indonesian. It reads an acquired `$I` file or an evidence directory and produces the existing schema 2.0 report formats. It does not upload evidence or require a local web server.
 
 ## Windows portable package
 
@@ -50,7 +50,7 @@ rbf --version
 rbf-gui
 ```
 
-The expected version is `rbf 1.3.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
+The expected version is `rbf 1.4.0`. Keep local modifications when resolving update conflicts. New source code does not change or overwrite reports from earlier runs. For a first installation, use the README setup steps; Debian-derived distributions such as Parrot also need Tk support matching the selected Python interpreter.
 
 ## 1. Choose the analysis source
 
@@ -79,6 +79,8 @@ Select **Mulai analisis**. Filesystem reading and parsing run in a worker thread
 Use **Batalkan** to request cooperative cancellation. The engine checks for cancellation during discovery, between items, and between payload read blocks. A blocked operating-system read may take time to return before the request can be acted on.
 
 Cancellation leaves the run explicitly incomplete. The application does not present its partial work as a completed report and disables export of that cancelled scan. Starting a new scan clears the previous in-memory report, so an earlier result cannot accidentally be exported as the new run. A completed scan can still contain reported errors or skipped items; completion of the process is different from a clean evidence collection.
+
+Before replacing a completed analysis or closing its window, the app offers **Simpan JSON**, **Buang hasil**, and **Batal** when its inventory has not been saved. Saving starts a background JSON export; cancellation of the file chooser or an export failure keeps the analysis open. Only a successful JSON export acknowledges the full inventory, including when its current view is filtered. CSV and HTML exports do not acknowledge a full audit save. Once the JSON save succeeds, the pending close/new scan can continue. Filters alone do not create a new analysis.
 
 If a job is still active when the window is closed, the app asks whether to request cancellation where possible and close after the worker stops. Exports and filters finish before the window closes; an export is not abruptly killed halfway through writing.
 

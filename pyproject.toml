@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rbinforensics"
-version = "1.3.0"
+version = "1.4.0"
 description = "Offline Recycle Bin forensics with artifact inventory, filters, timelines and HTML reports"
 readme = "README.md"
 requires-python = ">=3.10"

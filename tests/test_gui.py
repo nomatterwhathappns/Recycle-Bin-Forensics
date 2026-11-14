@@ -68,7 +68,10 @@ def app(monkeypatch):
             lambda title, message, **_: dialogs.append((str(title), str(message))),
         )
     monkeypatch.setattr(gui.messagebox, "askyesno", lambda *_, **__: True)
+    prompt_unsaved = gui.ForensicsApp._prompt_unsaved_report
+    monkeypatch.setattr(gui.ForensicsApp, "_prompt_unsaved_report", lambda _: "discard")
     root = gui.ForensicsApp()
+    root._test_prompt_unsaved_report = lambda: prompt_unsaved(root)
     root._test_dialogs = dialogs
     root._test_callback_errors = []
     root.report_callback_exception = lambda kind, value, _tb: root._test_callback_errors.append(
@@ -95,7 +98,13 @@ def _scan(app, source, *, count=1):
     app.hash_var.set(True)
     app.start_scan()
     _pump(
-        app, lambda: app.session.state == "complete" and len(app.inventory.get_children()) == count
+        app,
+        lambda: (
+            app.session.state == "complete"
+            and not app._awaiting_terminal
+            and not app._worker_running()
+            and len(app.inventory.get_children()) == count
+        ),
     )
     assert app.session.report is not None
 
@@ -812,6 +821,312 @@ def test_close_requests_cancel_and_waits_for_worker(app, evidence, monkeypatch):
     assert app.session.worker is not None
     app.session.worker.join(timeout=1)
     assert not app.session.worker.is_alive()
+
+
+def _next_scan(app, tmp_path):
+    directory = tmp_path.resolve() / "next-evidence"
+    directory.mkdir()
+    _item(directory, "NEXT.txt", r"D:\Other\next.txt")
+    app.source_var.set(str(directory))
+    return directory
+
+
+def _guard_choice(app, monkeypatch, choice):
+    prompts = []
+    monkeypatch.setattr(app, "_prompt_unsaved_report", lambda: prompts.append(True) or choice)
+    return prompts
+
+
+def _leave_result(app, action):
+    if action == "scan":
+        app.start_scan()
+    else:
+        app._on_close()
+
+
+@pytest.mark.parametrize("action", ["scan", "close"])
+@pytest.mark.parametrize("choice", ["cancel", "discard"])
+def test_unsaved_result_cancel_preserves_and_discard_continues(
+    app, evidence, tmp_path, monkeypatch, action, choice
+):
+    _scan(app, evidence)
+    baseline = app.session.report
+    rows = app.inventory.get_children()
+    second = _next_scan(app, tmp_path)
+    prompts = _guard_choice(app, monkeypatch, choice)
+    _leave_result(app, action)
+    assert prompts == [True]
+    if choice == "cancel":
+        assert app.session.report is baseline
+        assert app.inventory.get_children() == rows
+        assert not app._test_destroyed.is_set()
+        assert app.session.state == "complete"
+    elif action == "close":
+        assert app._test_destroyed.is_set()
+    else:
+        _pump(app, lambda: app.session.report is not None and app.session.report is not baseline)
+        assert app.session.report["input"] == str(second)
+
+
+@pytest.mark.parametrize("action", ["scan", "close"])
+def test_save_json_defers_action_until_export_event_and_worker_exit(
+    app, evidence, tmp_path, monkeypatch, action
+):
+    from rbinforensics import gui
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    second = _next_scan(app, tmp_path)
+    prompts = _guard_choice(app, monkeypatch, "save")
+    target = tmp_path.resolve() / "saved-before-leaving.json"
+    monkeypatch.setattr(gui.filedialog, "asksaveasfilename", lambda **_: str(target))
+    published, release = Event(), Event()
+    original = app.session._export_worker
+
+    def linger_after_export(*args, **kwargs):
+        result = original(*args, **kwargs)
+        published.set()
+        assert release.wait(5), "Published export worker was not released"
+        return result
+
+    monkeypatch.setattr(app.session, "_export_worker", linger_after_export)
+    _leave_result(app, action)
+    try:
+        _pump(app, published.is_set)
+        _pump(app, lambda: app._deferred_export_succeeded)
+        assert app._last_export == target
+        assert json.loads(target.read_text("utf-8"))["input"] == str(evidence)
+        assert app.session.report is baseline
+        assert app._worker_running()
+        assert app.start_button.instate(("disabled",))
+        assert not app._test_destroyed.is_set()
+        # Repeated user actions cannot replace the pending action or launch a job.
+        app.start_scan()
+        app._on_close()
+        assert app.session.report is baseline
+        assert prompts == [True]
+    finally:
+        release.set()
+    if action == "close":
+        _pump(app, app._test_destroyed.is_set)
+    else:
+        _pump(app, lambda: app.session.report is not None and app.session.report is not baseline)
+        assert app.session.report["input"] == str(second)
+    assert app._deferred_action is None
+
+
+@pytest.mark.parametrize("action", ["scan", "close"])
+@pytest.mark.parametrize(
+    "failure", ["cancel_dialog", "chooser_error", "export_error", "launch_error", "exception"]
+)
+def test_failed_or_cancelled_guard_save_preserves_result_and_aborts_action(
+    app, evidence, tmp_path, monkeypatch, action, failure
+):
+    from rbinforensics import desktop, gui
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    rows = app.inventory.get_children()
+    _next_scan(app, tmp_path)
+    prompts = _guard_choice(app, monkeypatch, "save")
+    target = tmp_path.resolve() / "guard-save.json"
+    if failure == "export_error":
+        target.write_text("preserve existing file", encoding="utf-8")
+    monkeypatch.setattr(
+        gui.filedialog,
+        "asksaveasfilename",
+        lambda **_: "" if failure == "cancel_dialog" else str(target),
+    )
+    if failure in ("launch_error", "exception", "chooser_error"):
+
+        def reject(*_, **__):
+            raise RuntimeError("Export worker could not start")
+
+        if failure == "chooser_error":
+            monkeypatch.setattr(gui.filedialog, "asksaveasfilename", reject)
+        elif failure == "launch_error":
+            monkeypatch.setattr(desktop.Thread, "start", reject)
+        else:
+            monkeypatch.setattr(app.session, "start_export", reject)
+    before = len(app._test_dialogs)
+    _leave_result(app, action)
+    if failure != "cancel_dialog":
+        _pump(
+            app,
+            lambda: len(app._test_dialogs) > before and not app._awaiting_terminal,
+        )
+    assert prompts == [True]
+    assert app._deferred_action is None
+    assert not app._deferred_export_succeeded
+    assert not app._closing
+    assert not app._test_destroyed.is_set()
+    assert app.session.state == "complete"
+    assert app.session.report is baseline
+    assert app.session.has_unsaved_report
+    assert app.inventory.get_children() == rows
+    assert app.start_button.instate(("!disabled",))
+    if failure == "export_error":
+        assert target.read_text("utf-8") == "preserve existing file"
+    else:
+        assert not target.exists()
+
+
+@pytest.mark.parametrize("action", ["scan", "close"])
+@pytest.mark.parametrize("format_name", ["csv", "html", "json"])
+def test_only_successful_json_save_skips_guard_even_with_filtered_view(
+    app, evidence, tmp_path, monkeypatch, action, format_name
+):
+    _item(evidence, "SECOND.txt", r"C:\Other\second.txt")
+    _scan(app, evidence, count=2)
+    baseline = app.session.report
+    app.extension_var.set(".pdf")
+    app.apply_filters()
+    _pump(app, lambda: len(app.inventory.get_children()) == 1 and not app._worker_running())
+    target = tmp_path.resolve() / f"filtered.{format_name}"
+    assert app.export_report(format_name, target)
+    _pump(
+        app,
+        lambda: app._last_export == target and not app._worker_running(),
+    )
+    assert app.session.has_unsaved_report == (format_name != "json")
+    if format_name == "json":
+        saved = json.loads(target.read_text("utf-8"))
+        assert len(saved["records"]) == 2
+        assert saved["selection"]["matched"] == 1
+    _next_scan(app, tmp_path)
+    prompts = _guard_choice(app, monkeypatch, "cancel")
+    _leave_result(app, action)
+    if format_name == "json":
+        assert not prompts
+        if action == "close":
+            assert app._test_destroyed.is_set()
+        else:
+            _pump(
+                app, lambda: app.session.report is not None and app.session.report is not baseline
+            )
+    else:
+        assert prompts == [True]
+        assert app.session.report is baseline
+        assert not app._test_destroyed.is_set()
+
+
+@pytest.mark.parametrize("format_name", ["csv", "json"])
+def test_close_during_export_waits_then_checks_unsaved_inventory(
+    app, evidence, tmp_path, monkeypatch, format_name
+):
+    from rbinforensics import desktop
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    prompts = _guard_choice(app, monkeypatch, "cancel")
+    entered, release = Event(), Event()
+    original = desktop.write_report
+
+    def delayed(*args, **kwargs):
+        entered.set()
+        assert release.wait(5), "Controlled export was not released"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(desktop, "write_report", delayed)
+    app.export_report(format_name, tmp_path.resolve() / f"closing.{format_name}")
+    try:
+        _pump(app, entered.is_set)
+        app._on_close()
+        assert app._closing
+        assert not prompts
+        assert not app._test_destroyed.is_set()
+    finally:
+        release.set()
+    if format_name == "json":
+        _pump(app, app._test_destroyed.is_set)
+        assert not prompts
+    else:
+        _pump(app, lambda: bool(prompts))
+        assert prompts == [True]
+        assert not app._closing
+        assert not app._test_destroyed.is_set()
+        assert app.session.report is baseline
+        assert app.start_button.instate(("!disabled",))
+
+
+@pytest.mark.parametrize("invalid", ["blank_source", "timezone"])
+def test_invalid_next_scan_form_preserves_result_without_unsaved_prompt(
+    app, evidence, monkeypatch, invalid
+):
+    _scan(app, evidence)
+    baseline = app.session.report
+    prompts = _guard_choice(app, monkeypatch, "discard")
+    if invalid == "blank_source":
+        app.source_var.set("   ")
+    else:
+        app.timezone_var.set("Invalid/Timezone")
+    app.start_scan()
+    assert not prompts
+    assert app.session.report is baseline
+    assert app._test_dialogs
+
+
+@pytest.mark.parametrize("state", ["idle", "error", "cancelled"])
+def test_closing_without_complete_inventory_never_prompts(app, monkeypatch, state):
+    app.session.state = state
+    prompts = _guard_choice(app, monkeypatch, "cancel")
+    app._on_close()
+    assert not prompts
+    assert app._test_destroyed.is_set()
+
+
+@pytest.mark.parametrize("choice", ["save", "discard", "cancel"])
+def test_unsaved_dialog_has_explicit_functional_buttons(app, choice):
+    from rbinforensics import gui
+
+    labels = []
+
+    def choose_button():
+        dialog = next(
+            child for child in app.winfo_children() if isinstance(child, gui.UnsavedReportDialog)
+        )
+        labels.extend(button.cget("text") for button in dialog.buttons.values())
+        assert dialog.grab_current() == dialog
+        dialog.buttons[choice].invoke()
+
+    app.after(0, choose_button)
+    # The fixture supplies a noninteractive default; call the actual implementation here.
+    assert app._test_prompt_unsaved_report() == choice
+    assert labels == ["Simpan JSON", "Buang hasil", "Batal"]
+
+
+def test_unsaved_modal_blocks_reentrant_close_and_new_scan(app, evidence, tmp_path, monkeypatch):
+    from rbinforensics import gui
+
+    _scan(app, evidence)
+    baseline = app.session.report
+    _next_scan(app, tmp_path)
+    prompts = []
+
+    def prompt():
+        prompts.append(True)
+        return app._test_prompt_unsaved_report()
+
+    monkeypatch.setattr(app, "_prompt_unsaved_report", prompt)
+
+    def nested_actions():
+        assert app._unsaved_prompt_active
+        app.tk.call(app.protocol("WM_DELETE_WINDOW"))
+        app.start_scan()
+        dialogs = [
+            child for child in app.winfo_children() if isinstance(child, gui.UnsavedReportDialog)
+        ]
+        assert len(dialogs) == 1
+        assert app.session.report is baseline
+        assert not app._test_destroyed.is_set()
+        dialogs[0].buttons["cancel"].invoke()
+
+    app.after(0, nested_actions)
+    app.start_scan()
+    assert prompts == [True]
+    assert not app._unsaved_prompt_active
+    assert app.session.report is baseline
+    assert not app._test_destroyed.is_set()
 
 
 def test_pagination_and_each_tree_keep_details_bound_to_current_row(app, tmp_path):

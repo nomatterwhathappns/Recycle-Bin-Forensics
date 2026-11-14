@@ -485,3 +485,212 @@ def test_new_scan_resets_progress_throttle_and_keeps_first_notification(
             "complete",
         ]
         assert emitted[-1][0] == "complete"
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_completed_inventory_is_unsaved_until_json_is_written(evidence: Path, empty: bool) -> None:
+    source = evidence
+    if empty:
+        source = evidence.parent / "empty"
+        source.mkdir()
+    session = DesktopSession()
+    assert session.has_unsaved_report is False
+    session.start_scan(source, ScanOptions())
+    join_worker(session)
+    assert session.state == "complete"
+    assert session.has_unsaved_report is True
+    target = evidence.parent / "complete-audit.json"
+    session.export(target, "json")
+    saved = json.loads(target.read_text("utf-8"))
+    assert len(saved["records"]) == (0 if empty else 2)
+    assert session.has_unsaved_report is False
+
+
+@pytest.mark.parametrize("format_name", ["json", "csv", "html"])
+def test_only_json_saves_complete_inventory_even_when_view_is_filtered(
+    evidence: Path, format_name: str
+) -> None:
+    session = completed(evidence)
+    baseline = json.dumps(session.report, sort_keys=True)
+    session.apply_view(FilterOptions(extensions=(".pdf",)))
+    selected = json.dumps(session.view, sort_keys=True)
+    assert session.view["selection"]["matched"] == 1
+    assert session.has_unsaved_report is True
+    target = evidence.parent / ("selected." + format_name)
+    session.start_export(target, format_name)
+    join_worker(session)
+    assert session.state == "complete"
+    assert target.is_file()
+    assert session.has_unsaved_report is (format_name != "json")
+    assert json.dumps(session.report, sort_keys=True) == baseline
+    assert json.dumps(session.view, sort_keys=True) == selected
+    if format_name == "json":
+        saved = json.loads(target.read_text("utf-8"))
+        assert len(saved["records"]) == 2
+        assert saved["selection"]["matched"] == 1
+        assert {record["source_name"] for record in saved["records"]} == {
+            "$IABC.pdf",
+            "$IDEF.txt",
+        }
+
+
+def test_saved_inventory_stays_saved_after_filters_and_partial_exports(evidence: Path) -> None:
+    session = completed(evidence)
+    target = evidence.parent / "full.json"
+    session.export(target, "json")
+    original_bytes = target.read_bytes()
+    assert session.has_unsaved_report is False
+    session.start_filter(FilterOptions(extensions=(".txt",)))
+    join_worker(session)
+    assert session.view["selection"]["matched"] == 1
+    assert session.has_unsaved_report is False
+    session.export(evidence.parent / "selected.csv", "csv")
+    assert session.has_unsaved_report is False
+    session.start_filter(FilterOptions(min_size=10, max_size=1))
+    join_worker(session)
+    assert session.state == "complete" and session.error
+    assert session.has_unsaved_report is False
+    assert target.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("previously_saved", [False, True])
+def test_new_analysis_gets_its_own_unsaved_state(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch, previously_saved: bool
+) -> None:
+    session = completed(evidence)
+    if previously_saved:
+        session.export(evidence.parent / "earlier.json", "json")
+    assert session.has_unsaved_report is (not previously_saved)
+    entered, release = Event(), Event()
+    scan = desktop.scan
+
+    def blocked_scan(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return scan(*args, **kwargs)
+
+    monkeypatch.setattr(desktop, "scan", blocked_scan)
+    session.start_scan(evidence, ScanOptions(case_id="NEXT-ANALYSIS"))
+    assert entered.wait(2)
+    try:
+        assert session.state == "scanning"
+        assert session.report is None
+        assert session.has_unsaved_report is False
+    finally:
+        release.set()
+        join_worker(session)
+    assert session.state == "complete"
+    assert session.report["options"]["case_id"] == "NEXT-ANALYSIS"
+    assert session.has_unsaved_report is True
+
+
+@pytest.mark.parametrize("failure", [ScanCancelled, PermissionError])
+def test_incomplete_new_scan_has_no_unsaved_complete_inventory(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch, failure: type[Exception]
+) -> None:
+    session = completed(evidence)
+    assert session.has_unsaved_report is True
+    scan = desktop.scan
+
+    def incomplete_scan(*args, **kwargs):
+        raise failure()
+
+    monkeypatch.setattr(desktop, "scan", incomplete_scan)
+    session.start_scan(evidence, ScanOptions())
+    join_worker(session)
+    assert session.state == ("cancelled" if failure is ScanCancelled else "error")
+    assert session.report is None
+    assert session.has_unsaved_report is False
+    monkeypatch.setattr(desktop, "scan", scan)
+    session.start_scan(evidence, ScanOptions())
+    join_worker(session)
+    assert session.state == "complete"
+    assert session.has_unsaved_report is True
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_failed_json_export_keeps_unsaved_inventory_until_success(
+    evidence: Path, asynchronous: bool
+) -> None:
+    session = completed(evidence)
+    baseline = session.report
+    target = evidence.parent / "keep-existing.json"
+    target.write_text("Earlier report", encoding="utf-8")
+    if asynchronous:
+        session.start_export(target, "json")
+        join_worker(session)
+    else:
+        with pytest.raises(ValueError, match="already exists"):
+            session.export(target, "json")
+    assert session.state == "complete"
+    assert session.report is baseline
+    assert session.has_unsaved_report is True
+    assert target.read_text("utf-8") == "Earlier report"
+    assert events(session)[-1][0] == "export_error"
+    session.export(evidence.parent / "retry-audit.json", "json")
+    assert session.has_unsaved_report is False
+
+
+def test_export_thread_start_failure_cannot_mark_inventory_saved(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = completed(evidence)
+    target = evidence.parent / "retry-thread.json"
+
+    def cannot_start(_):
+        raise RuntimeError("Thread unavailable")
+
+    with monkeypatch.context() as context:
+        context.setattr(desktop.Thread, "start", cannot_start)
+        session.start_export(target, "json")
+    assert session.state == "complete"
+    assert session.has_unsaved_report is True
+    assert not target.exists()
+    assert events(session)[-1] == ("export_error", "Thread unavailable")
+    session.start_export(target, "json")
+    join_worker(session)
+    assert target.is_file()
+    assert session.has_unsaved_report is False
+
+
+def test_json_save_marks_only_the_analysis_whose_export_finished(
+    evidence: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = completed(evidence)
+    entered, release = Event(), Event()
+    write = desktop.write_report
+    target = evidence.parent / "first-audit.json"
+
+    def blocked_write(report, destination, format_name):
+        entered.set()
+        assert release.wait(5)
+        return write(report, destination, format_name)
+
+    monkeypatch.setattr(desktop, "write_report", blocked_write)
+    session.start_export(target, "json")
+    assert entered.wait(2)
+    try:
+        assert session.state == "exporting"
+        assert session.has_unsaved_report is True
+        with pytest.raises(RuntimeError, match="already running"):
+            session.start_scan(evidence, ScanOptions())
+    finally:
+        release.set()
+        join_worker(session)
+    assert session.has_unsaved_report is False
+    assert json.loads(target.read_text("utf-8"))["summary"]["parsed"] == 2
+    session.start_scan(evidence, ScanOptions(case_id="SECOND"))
+    join_worker(session)
+    assert session.has_unsaved_report is True
+    assert session.report["options"]["case_id"] == "SECOND"
+
+
+def test_failed_extra_export_does_not_forget_an_existing_json_save(evidence: Path) -> None:
+    session = completed(evidence)
+    target = evidence.parent / "saved.json"
+    session.export(target, "json")
+    saved_bytes = target.read_bytes()
+    with pytest.raises(ValueError, match="already exists"):
+        session.export(target, "json")
+    assert session.has_unsaved_report is False
+    assert target.read_bytes() == saved_bytes

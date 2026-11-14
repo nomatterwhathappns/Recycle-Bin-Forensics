@@ -39,6 +39,19 @@ class DesktopSession:
         self._lock = Lock()
         self._job_id = 0
         self._last_progress_at: float | None = None
+        self._analysis_id = 0
+        self._saved_analysis_id: int | None = None
+
+    @property
+    def has_unsaved_report(self) -> bool:
+        """Whether the current complete inventory lacks a successful JSON save.
+
+        CSV and HTML are presentation exports. JSON retains the full inventory
+        even when its selection is filtered, so only JSON acknowledges a save.
+        An empty but completed analysis is also an inventory worth preserving.
+        """
+        with self._lock:
+            return self.report is not None and self._saved_analysis_id != self._analysis_id
 
     def _require_complete(self) -> dict:
         if self.state != "complete" or self.report is None or self.view is None:
@@ -88,6 +101,8 @@ class DesktopSession:
             self._drain_events()
             self._job_id += 1
             job_id = self._job_id
+            self._analysis_id += 1
+            self._saved_analysis_id = None
             self.report = None
             self.view = None
             self.error = None
@@ -231,6 +246,8 @@ class DesktopSession:
             return None
         with self._lock:
             if self._job_id == job_id:
+                if format_name == "json":
+                    self._saved_analysis_id = self._analysis_id
                 self.state = "complete"
                 self.error = None
                 self.events.put(("exported", path))

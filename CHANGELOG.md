@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+
+- Save JSON / discard / cancel protection before replacing or closing a completed analysis that has not been saved.
+- Analysis-specific saved-state tracking: only a successful full-inventory JSON export acknowledges a save; CSV/HTML retain the safeguard.
+- Regression coverage for save cancellation, failed exports, filtered results, empty inventories, and deferred actions.
+
+### Changed
+
+- Application/package version is `1.4.0`; completed forensic reports retain schema `2.0`.
+- A pending close/new scan continues only after its requested JSON export succeeds.
+
 ## 1.3.0
 
 ### Added

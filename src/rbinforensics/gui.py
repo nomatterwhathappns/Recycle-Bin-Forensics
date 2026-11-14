@@ -102,6 +102,47 @@ class WorkspacePane(tk.PanedWindow if tk is not None else object):
         return self.sash_coord(index)[1]
 
 
+class UnsavedReportDialog(tk.Toplevel if tk is not None else object):
+    """Explicit save/discard/cancel choices for the complete scan inventory."""
+
+    def __init__(self, parent) -> None:
+        super().__init__(parent)
+        self.choice = "cancel"
+        self.title("Hasil belum disimpan")
+        self.resizable(False, False)
+        self.transient(parent)
+        panel = ttk.Frame(self, padding=20)
+        panel.pack(fill="both", expand=True)
+        ttk.Label(
+            panel,
+            text=(
+                "Hasil analisis belum disimpan sebagai JSON. Simpan seluruh inventaris "
+                "sebelum melanjutkan?\n\nEkspor CSV atau HTML tidak menggantikan simpan JSON."
+            ),
+            wraplength=440,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 18))
+        self.buttons = {}
+        for column, (choice, label) in enumerate(
+            (("save", "Simpan JSON"), ("discard", "Buang hasil"), ("cancel", "Batal"))
+        ):
+            button = ttk.Button(panel, text=label, command=lambda value=choice: self._choose(value))
+            button.grid(row=1, column=column, padx=(0 if column == 0 else 8, 0))
+            self.buttons[choice] = button
+        self.protocol("WM_DELETE_WINDOW", lambda: self._choose("cancel"))
+        self.bind("<Escape>", lambda _: self._choose("cancel"))
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_reqwidth()) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_reqheight()) // 2
+        self.geometry(f"+{max(0, x)}+{max(0, y)}")
+        self.grab_set()
+        self.buttons["cancel"].focus_set()
+
+    def _choose(self, choice: str) -> None:
+        self.choice = choice
+        self.destroy()
+
+
 class ForensicsApp(tk.Tk if tk is not None else object):
     """A responsive scan/view/export workflow over one DesktopSession."""
 
@@ -125,6 +166,9 @@ class ForensicsApp(tk.Tk if tk is not None else object):
         self._closing = False
         self._cancel_requested = False
         self._awaiting_terminal = False
+        self._unsaved_prompt_active = False
+        self._deferred_action: tuple[str, tuple[Path, ScanOptions] | None] | None = None
+        self._deferred_export_succeeded = False
         self._poll_id = None
         self._last_export: Path | None = None
         self.detail_window = None
@@ -785,8 +829,40 @@ class ForensicsApp(tk.Tk if tk is not None else object):
     def _dialog_error(self, title: str, error: object) -> None:
         messagebox.showerror(title, safe_text(error), parent=self)
 
+    def _prompt_unsaved_report(self) -> str:
+        dialog = UnsavedReportDialog(self)
+        self.wait_window(dialog)
+        return dialog.choice
+
+    def _guard_unsaved_report(self, action: tuple[str, tuple[Path, ScanOptions] | None]) -> bool:
+        if not self.session.has_unsaved_report:
+            return True
+        self._unsaved_prompt_active = True
+        try:
+            choice = self._prompt_unsaved_report()
+        finally:
+            self._unsaved_prompt_active = False
+        if choice == "discard":
+            return True
+        if choice == "save":
+            self._deferred_action = action
+            self._deferred_export_succeeded = False
+            if not self.export_report("json"):
+                self._deferred_action = None
+        return False
+
+    def _worker_running(self) -> bool:
+        return self.session.worker is not None and self.session.worker.is_alive()
+
     def start_scan(self) -> None:
-        if self.session.state in ("scanning", "filtering", "exporting") or self._awaiting_terminal:
+        if (
+            self._closing
+            or self._unsaved_prompt_active
+            or self._deferred_action is not None
+            or self._worker_running()
+            or self.session.state in ("scanning", "filtering", "exporting")
+            or self._awaiting_terminal
+        ):
             return
         if not self.source_var.get().strip():
             self._dialog_error(
@@ -804,7 +880,16 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 self.case_var.get().strip() or None,
                 self.examiner_var.get().strip() or None,
             )
-            self.session.start_scan(Path(self.source_var.get()).expanduser(), options)
+            source = Path(self.source_var.get()).expanduser()
+        except Exception as exc:
+            self._dialog_error("Analisis tidak dapat dimulai", exc)
+            return
+        if self._guard_unsaved_report(("scan", (source, options))):
+            self._begin_scan(source, options)
+
+    def _begin_scan(self, source: Path, options: ScanOptions) -> None:
+        try:
+            self.session.start_scan(source, options)
         except Exception as exc:
             self._dialog_error("Analisis tidak dapat dimulai", exc)
             return
@@ -995,33 +1080,34 @@ class ForensicsApp(tk.Tk if tk is not None else object):
     def copy_hash(self) -> None:
         self.detail_panel.copy_hash()
 
-    def export_report(self, format_name: str, destination: Path | None = None) -> None:
+    def export_report(self, format_name: str, destination: Path | None = None) -> bool:
         if self.session.state != "complete" or self._awaiting_terminal:
             self._dialog_error(
                 "Belum ada hasil lengkap", "Ekspor hanya tersedia setelah analisis selesai."
             )
-            return
-        if destination is None:
-            path = filedialog.asksaveasfilename(
-                parent=self,
-                title="Simpan laporan di luar direktori bukti",
-                defaultextension="." + format_name,
-                initialfile="recycle-bin-report." + format_name,
-                filetypes=((format_name.upper(), "*." + format_name),),
-            )
-            if not path:
-                return
-            destination = Path(path)
+            return False
         try:
+            if destination is None:
+                path = filedialog.asksaveasfilename(
+                    parent=self,
+                    title="Simpan laporan di luar direktori bukti",
+                    defaultextension="." + format_name,
+                    initialfile="recycle-bin-report." + format_name,
+                    filetypes=((format_name.upper(), "*." + format_name),),
+                )
+                if not path:
+                    return False
+                destination = Path(path)
             self.session.start_export(destination, format_name)
         except Exception as exc:
             self._dialog_error("Ekspor gagal", exc)
-            return
+            return False
         self.status_var.set("Menyimpan laporan…")
         self._awaiting_terminal = True
         self.progress.configure(mode="indeterminate", value=0)
         self.progress.start(15)
         self._sync_controls()
+        return True
 
     def open_report(self) -> None:
         if self._last_export and self._last_export.suffix.lower() in (".html", ".htm"):
@@ -1047,6 +1133,7 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             state in ("scanning", "filtering", "exporting")
             or self._closing
             or self._awaiting_terminal
+            or self._deferred_action is not None
         )
         ready = state == "complete" and not busy
         for widget, normal in self._inputs:
@@ -1140,11 +1227,15 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                     "Analisis dibatalkan — belum lengkap, tidak ada laporan yang dapat diekspor."
                 )
             elif kind in ("error", "filter_error", "export_error"):
+                self._deferred_action = None
+                self._deferred_export_succeeded = False
                 self.progress.configure(mode="determinate", value=0)
                 self.status_var.set("Pekerjaan gagal: " + str(payload))
                 if not self._closing:
                     self._dialog_error("Periksa kembali input atau tujuan laporan", payload)
             elif kind == "exported":
+                if self._deferred_action is not None:
+                    self._deferred_export_succeeded = True
                 self.progress.configure(mode="determinate", value=100)
                 self._last_export = Path(payload)
                 filename = safe_text(Path(payload).name)
@@ -1154,16 +1245,29 @@ class ForensicsApp(tk.Tk if tk is not None else object):
                 self.status_var.set("Laporan berhasil disimpan.")
         if latest is not None and self.session.state == "scanning":
             self._update_progress(latest)
+        if self._closing and not self._worker_running() and not self._awaiting_terminal:
+            self._closing = False
+            if self._guard_unsaved_report(("close", None)):
+                self.destroy()
+                return
+        if self._deferred_export_succeeded and not self._worker_running():
+            action = self._deferred_action
+            self._deferred_action = None
+            self._deferred_export_succeeded = False
+            if action is not None and self.session.state == "complete":
+                kind, scan_arguments = action
+                if kind == "close":
+                    self.destroy()
+                    return
+                assert scan_arguments is not None
+                self._begin_scan(*scan_arguments)
         self._sync_controls()
-        if self._closing and not (self.session.worker and self.session.worker.is_alive()):
-            self.destroy()
-            return
         self._poll_id = self.after(50, self._poll_events)
 
     def _on_close(self) -> None:
-        if self._closing:
+        if self._closing or self._unsaved_prompt_active or self._deferred_action is not None:
             return
-        if self.session.worker and self.session.worker.is_alive():
+        if self._worker_running():
             if not messagebox.askyesno(
                 "Pekerjaan masih berjalan",
                 "Hentikan scan bila memungkinkan dan tutup setelah pekerjaan berhenti?",
@@ -1174,8 +1278,12 @@ class ForensicsApp(tk.Tk if tk is not None else object):
             self.session.cancel()
             self.status_var.set("Menunggu pekerjaan berhenti sebelum menutup…")
             self._sync_controls()
+        elif self._awaiting_terminal:
+            self._closing = True
+            self._sync_controls()
         else:
-            self.destroy()
+            if self._guard_unsaved_report(("close", None)):
+                self.destroy()
 
     def destroy(self) -> None:
         if self._sash_job is not None:
